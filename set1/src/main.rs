@@ -2,6 +2,20 @@ mod common;
 
 use common::{hex_decode_string, print_challenge_result};
 
+use std::fmt;
+use std::string;
+
+pub struct Wrap(Vec<u8>);
+
+impl fmt::Display for Wrap {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for &byte in &self.0 {
+            write!(f, "{}", byte as char)?;
+        }
+        Ok(())
+    }
+}
+
 fn challenge1() {
     let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec();
     let bytes = hex_decode_string(n); // vec![0x49, 0x27, 0x6d, 0x20, ...]
@@ -26,16 +40,34 @@ fn challenge2() {
 }
 
 fn challenge3() {
+    // Cooking MC's like a pound of bacon
+    // let n = hex_decode_string(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736".to_vec());
+    let expected_result = "I'm killing your brain like a poisonous mushroom".to_string();
     let cipher = hex_decode_string(b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec());
 
-    for poss_key in 0..(std::char::MAX as u8) {
-        let decoded_msg = common::single_byte_xor(&cipher, poss_key);
-        for byte in decoded_msg {
-            print!("{}", byte as char);
+    let most_common_letters = vec!['e', 't', 'a', 'o', 'i', 'n'];
+    
+    let mut max_count: u8 = 0;
+    let mut key: u8 = 0x0;
+
+    for poss_key in 0..(0xffu32 + 1) {
+        let decoded_msg = common::single_byte_xor(&cipher, poss_key as u8);
+        let mut freq_count = 0;
+        for &byte in &decoded_msg {
+            let val = byte as char;
+            if most_common_letters.contains(&val) {
+                freq_count += 1;
+            }
         }
-        println!("", );
+        if freq_count > max_count {
+            max_count = freq_count;
+            key = poss_key as u8;
+        }
     }
-    println!();
+
+    let result = Wrap(common::single_byte_xor(&cipher, key)).to_string();
+
+    print_challenge_result(3, result == expected_result);
 }
 
 fn main() {

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::io::{Cursor};
 use bitstream_io::{BitReader, BitWriter, BigEndian};
 
