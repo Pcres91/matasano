@@ -3,7 +3,6 @@ mod common;
 use common::{hex_decode_string, print_challenge_result};
 
 use std::fmt;
-use std::string;
 
 pub struct Wrap(Vec<u8>);
 
