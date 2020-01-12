@@ -1,5 +1,5 @@
 mod common;
-use common::{hex_decode_string, base64_pretty_print, XOR, print_challenge_result};
+use common::{hex_decode_string, base64_pretty_print, xor_chars, print_challenge_result};
 
 fn challenge1() {
     let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec();
@@ -19,15 +19,31 @@ fn challenge2() {
     let b = b"686974207468652062756c6c277320657965".to_vec();
     let b_bytes = hex_decode_string(b);
 
-    let result = XOR(a_bytes, b_bytes);
+    let result = xor_chars(a_bytes, b_bytes);
 
-    for byte in result {
-        print!("{:2x}", byte);
+    let x = b"746865206b696420646f6e277420706c6179".to_vec();
+    let expected_result = hex_decode_string(x);
+
+    print_challenge_result(2, result == expected_result);
+}
+
+fn challenge3() {
+    let m = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec();
+    let bytes = hex_decode_string(m);
+
+
+    for byte in &bytes {
+        print!("{}", (byte ^ 0x1) as char);
     }
     println!();
+
+    // for val in 0..16u8 {
+    // }
+    // println!();
 }
 
 fn main() {
     challenge1();
     challenge2();
+    challenge3();
 }
