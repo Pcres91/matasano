@@ -28,6 +28,6 @@ fn challenge2() {
 }
 
 fn main() {
-    // challenge1();
+    challenge1();
     challenge2();
 }
