@@ -1,6 +1,5 @@
-use std::io::{Cursor, Read};
+use std::io::{Cursor};
 use bitstream_io::{BitReader, BitWriter, BigEndian};
-use std::ops::BitXor;
 
 extern crate num_bigint as bigint;
 extern crate num_traits;
@@ -114,10 +113,20 @@ fn biguint_to_base64(bytes: &BigUint) -> Vec<char> {
     return base64_chars;
 }
 
-pub fn XOR(left: Vec<u8>, right: Vec<u8>) -> Vec<u8>
-{
+pub fn xor_bytes(left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
     let mut res: Vec<u8> = Vec::new();
 
+    for i in 0..left.len() {
+        res.push(left[i] ^ right[i]);
+    }
+
+    return res;
+}
+
+// performs a per-bit operation using bitstreams.Bit of overkill
+#[allow(dead_code)]
+pub fn xor_bits(left: Vec<u8>, right: Vec<u8>) -> Vec<u8>
+{
     let mut l_cur = Cursor::new(&left);
     let mut l_reader = BitReader::endian(&mut l_cur, BigEndian);
 
@@ -136,14 +145,12 @@ pub fn XOR(left: Vec<u8>, right: Vec<u8>) -> Vec<u8>
     return writer.into_writer();
 }
 
-#[derive(Debug, PartialEq)]
-struct Scalar(bool);
+pub fn single_byte_xor(message: &Vec<u8> , byte: u8) -> Vec<u8> {
+    let mut res = Vec::new();
 
-impl BitXor for Scalar {
-    type Output = Self;
-
-    // rhs is the "right-hand side" of the expression `a ^ b`
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        Scalar(self.0 ^ rhs.0)
+    for message_byte in message {
+        res.push(message_byte ^ byte);
     }
+
+    return res
 }
