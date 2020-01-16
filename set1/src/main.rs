@@ -1,15 +1,14 @@
 #![allow(dead_code)]
 mod common;
-
 use common::{print_challenge_result, Wrap};
 
 fn challenge1() {
     use common::hex_decode_bytes;
-    let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec();
+    let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let bytes = hex_decode_bytes(n); // vec![0x49, 0x27, 0x6d, 0x20, ...]
 
     use common::base64_pretty_print;
-    let encoded = base64_pretty_print(bytes);
+    let encoded = base64_pretty_print(&bytes);
 
     let expected_result =
         "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
@@ -19,13 +18,13 @@ fn challenge1() {
 
 fn challenge2() {
     use common::{hex_decode_bytes, xor_bytes};
-    let a = hex_decode_bytes(b"1c0111001f010100061a024b53535009181c".to_vec());
+    let a = hex_decode_bytes(b"1c0111001f010100061a024b53535009181c");
 
-    let b = hex_decode_bytes(b"686974207468652062756c6c277320657965".to_vec());
+    let b = hex_decode_bytes(b"686974207468652062756c6c277320657965");
 
-    let result = xor_bytes(a, b);
+    let result = xor_bytes(&a, &b);
 
-    let expected_result = hex_decode_bytes(b"746865206b696420646f6e277420706c6179".to_vec());
+    let expected_result = hex_decode_bytes(b"746865206b696420646f6e277420706c6179");
 
     print_challenge_result(2, result == expected_result);
 }
@@ -34,7 +33,7 @@ fn challenge3() {
     use common::hex_decode_bytes;
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher = hex_decode_bytes(
-        b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736".to_vec(),
+        b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736",
     );
     // let expected_result = "I'm killing your brain like a poisonous mushroom".to_string();
     // let cipher = hex_decode_bytes(b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec());
@@ -59,7 +58,7 @@ fn challenge4() {
     let mut found_message: (u32, u8, Vec<u8>) = (0, 0, vec![]);
     for line in reader.lines() {
         let copy = line.unwrap();
-        let bytes = hex_decode_string(copy);
+        let bytes = hex_decode_string(&copy);
         let key = find_single_char_key(&bytes);
         let msg = single_byte_xor(&bytes, key);
         let freq_count = get_common_letter_frequencies(&msg);
@@ -77,30 +76,34 @@ fn challenge5() {
     let key = b"ICE".to_vec();
 
     use common::repeated_xor;
-    let cipher = repeated_xor(plain_text, key);
+    let cipher = repeated_xor(&plain_text, &key);
 
     use common::hex_decode_bytes;
-    let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f".to_vec());
+    let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f");
 
     print_challenge_result(5, cipher == expected_result);
 }
 
 fn challenge6() {
-    let string_1 = b"this is a test".to_vec();
-    let string_2 = b"wokka wokka!!!".to_vec();
-    let _err = b"use to demonstrate mismatched lengths".to_vec();
-    use common::hamming_distance;
-    match hamming_distance(string_1, string_2) {
-        Ok(d) => println!("{}", d),
-        Err(e) => println!("Error: {}. Buffers are most likely mismatched byte lengths", e)
-    } 
+    // let string_1 = b"this is a test".to_vec();
+    // let string_2 = b"wokka wokka!!!".to_vec();
+    // let _err = b"use to demonstrate mismatched lengths".to_vec();
+    // use common::hamming_distance;
+    // match hamming_distance(string_1, string_2) {
+    //     Ok(d) => println!("{}", d),
+    //     Err(e) => println!("Error: {}. Buffers are most likely mismatched byte lengths", e)
+    // }
+
+    let file_data = common::read_file_into_buffer("6.txt").unwrap();
+
+    println!("{}", Wrap(file_data));
 }
 
 fn main() {
-    // challenge1();
-    // challenge2();
-    // challenge3();
-    // challenge4();
-    // challenge5();
+    challenge1();
+    challenge2();
+    challenge3();
+    challenge4();
+    challenge5();
     challenge6();
 }

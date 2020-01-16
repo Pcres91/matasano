@@ -23,21 +23,23 @@ impl fmt::Display for Wrap {
 }
 
 pub fn print_challenge_result(challenge_num: u32, success: bool) {
-    match success {
-        true => println!("SUCCESSFUL: Challenge {}", challenge_num),
-        false => println!("FAILED: Challenge {}", challenge_num),
+    if success {
+        println!("SUCCESSFUL: Challenge {}", challenge_num)
+    }
+    else {
+        println!("FAILED: Challenge {}", challenge_num)
     }
 }
 
 fn pretty_print(chars: Vec<char>) -> String {
-    return chars.into_iter().collect();
+    chars.into_iter().collect()
 }
 
-pub fn base64_pretty_print(bytes: Vec<u8>) -> String {
-    return pretty_print(base64_encode(bytes));
+pub fn base64_pretty_print(bytes: &[u8]) -> String {
+    pretty_print(base64_encode(bytes))
 }
 
-pub fn base64_encode(bytes: Vec<u8>) -> Vec<char> {
+pub fn base64_encode(bytes: &[u8]) -> Vec<char> {
     let num_bits = bytes.len() * 8;
     let num_chars = num_bits / 6;
 
@@ -49,7 +51,8 @@ pub fn base64_encode(bytes: Vec<u8>) -> Vec<char> {
         let c = get_base64_rep(reader.read::<u8>(6).unwrap()).unwrap();
         v.push(c);
     }
-    return v;
+
+    v
 }
 
 // this converts u8 to base64. If topmost bits aren't 00, returns None
@@ -59,31 +62,31 @@ pub fn get_base64_rep(byte: u8) -> Option<char> {
     }
     // capitals
     if byte <= 25 {
-        return Some((0x41 + byte) as char);
+        Some((0x41 + byte) as char)
     }
     // lowercase
     else if byte <= 51 {
-        return Some((0x61 - 26 + byte) as char);
+        Some((0x61 - 26 + byte) as char)
     }
     //digits
     else if byte <= 61 {
-        return Some((0x30 + byte - 52) as char);
+        Some((0x30 + byte - 52) as char)
     } else if byte == 62 {
-        return Some('+');
+        Some('+')
     } else {
-        return Some('/');
+        Some('/')
     }
 }
 
-pub fn hex_decode_string(string: String) -> Vec<u8> {
-    return hex_decode_bytes(string.into_bytes());
+pub fn hex_decode_string(string: &str) -> Vec<u8> {
+    hex_decode_bytes(string.as_bytes())
 }
 
 // converts the ascii chars for strings into their hex equivalents.
 // eg: "abcd" -> vec![11, 12, 13, 14]
-pub fn hex_decode_bytes(bytes: Vec<u8>) -> Vec<u8> {
-    let n = BigUint::parse_bytes(bytes.as_slice(), 16).unwrap();
-    return n.to_bytes_be();
+pub fn hex_decode_bytes(bytes: &[u8]) -> Vec<u8> {
+    let n = BigUint::parse_bytes(bytes, 16).unwrap();
+    n.to_bytes_be()
 }
 
 #[allow(dead_code)]
@@ -120,29 +123,29 @@ fn biguint_to_base64(bytes: &BigUint) -> Vec<char> {
         //     Some(x) => base64_chars.push(common::get_base64_rep(bitmask & x)),
         //     None => println!("shifting didn't work :( {}", i)
         // }
-        i = i - 1;
+        i -= i;
     }
     if padding {
         // TODO: need to implement adding the padding char '='
         println!("Warning: base64 padding not implemented\n");
     }
 
-    return base64_chars;
+    base64_chars
 }
 
-pub fn xor_bytes(left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
+pub fn xor_bytes(left: &[u8], right: &[u8]) -> Vec<u8> {
     let mut res: Vec<u8> = Vec::new();
 
     for i in 0..left.len() {
         res.push(left[i] ^ right[i]);
     }
 
-    return res;
+    res
 }
 
 // performs a per-bit operation using bitstreams.Bit of overkill
 #[allow(dead_code)]
-pub fn xor_bits(left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
+pub fn xor_bits(left: &[u8], right: &[u8]) -> Vec<u8> {
     let mut l_cur = Cursor::new(&left);
     let mut l_reader = BitReader::endian(&mut l_cur, BigEndian);
 
@@ -158,20 +161,20 @@ pub fn xor_bits(left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
         writer.write_bit(res).unwrap();
     }
 
-    return writer.into_writer();
+    writer.into_writer()
 }
 
-pub fn single_byte_xor(message: &Vec<u8>, byte: u8) -> Vec<u8> {
+pub fn single_byte_xor(message: &[u8], byte: u8) -> Vec<u8> {
     let mut res = Vec::new();
 
     for message_byte in message {
         res.push(message_byte ^ byte);
     }
 
-    return res;
+    res
 }
 
-pub fn get_common_letter_frequencies(msg: &Vec<u8>) -> u32 {
+pub fn get_common_letter_frequencies(msg: &[u8]) -> u32 {
     let most_common_letters = vec!['e', 't', 'a', 'o', 'i', 'n'];
 
     let mut freq_count = 0;
@@ -182,14 +185,14 @@ pub fn get_common_letter_frequencies(msg: &Vec<u8>) -> u32 {
         }
     }
 
-    return freq_count;
+    freq_count
 }
 
-pub fn find_single_char_key(cryptogram: &Vec<u8>) -> u8 {
+pub fn find_single_char_key(cryptogram: &[u8]) -> u8 {
     let mut max_count: u32 = 0;
     let mut key: u8 = 0x0;
 
-    for poss_key in 0..(0xffu32 + 1) {
+    for poss_key in 0..=0xffu32 {
         let decoded_msg = single_byte_xor(&cryptogram, poss_key as u8);
         let freq_count = get_common_letter_frequencies(&decoded_msg);
         if freq_count > max_count {
@@ -198,23 +201,24 @@ pub fn find_single_char_key(cryptogram: &Vec<u8>) -> u8 {
         }
     }
 
-    return key;
+    key
 }
 
-pub fn repeated_xor(text: Vec<u8>, key: Vec<u8>) -> Vec<u8> {
+pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
 
     let mut idx = 0;
     let mut cipher: Vec<u8> = vec![];
-    for val in 0..text.len() {
-        cipher.push(text[val] as u8 ^ key[idx]);
+    for val in text {
+        cipher.push(val ^ key[idx]);
 
         idx += 1;
         if idx == key.len() {idx = 0};
     }
-    return cipher;
+
+    cipher
 }
 
-pub fn hamming_distance(string_1: Vec<u8>, string_2: Vec<u8>) -> Result<u32, Error>
+pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<u32, Error>
 {
     let mut cur1 = Cursor::new(&string_1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
@@ -228,4 +232,35 @@ pub fn hamming_distance(string_1: Vec<u8>, string_2: Vec<u8>) -> Result<u32, Err
     }
 
     Ok(distance)
+}
+
+pub fn read_file_into_buffer(filepath: &str) -> Result<Vec<u8>, Error> {
+    use std::fs::File;
+    use std::io::Read;
+
+    let mut file = File::open(filepath)?;
+
+    let mut data = Vec::new();
+    file.read_to_end(&mut data)?;
+
+    Ok(data)
+}
+
+pub fn get_average_distance(data: &[u8], key_length: u32, num_blocks: u32) -> u32 {
+    0
+}
+
+pub fn find_key_size(data: &[u8], key_range: (u32, u32), num_blocks: u32) -> u32 {
+    let mut min_distance = std::u32::MAX;
+    let mut key_size = key_range.0;
+    for key_length in key_range.0..=key_range.1 {
+        let distance = get_average_distance(&data, key_length, num_blocks);
+
+        if distance < min_distance {
+            min_distance = distance;
+            key_size = key_length;
+        }
+    }
+
+    key_size
 }
