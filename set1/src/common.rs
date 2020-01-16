@@ -263,16 +263,15 @@ pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -
 }
 
 pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) -> Result<usize, Error> {
-    let mut min_distance = std::f32::MAX;
-    let mut key_size = key_range.0;
+    let mut distances: Vec<(f32, usize)> = vec![];
+
     for key_length in key_range.0..=key_range.1 {
         let distance = get_average_distance(&data, key_length, num_blocks)?;
 
-        if distance < min_distance {
-            min_distance = distance;
-            key_size = key_length;
-        }
+        distances.push((distance, key_length));
     }
 
-    Ok(key_size)
+    distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    // println!("{:?}", distances);
+    Ok(distances[0].1)
 }
