@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use bitstream_io::{BigEndian, BitReader, BitWriter};
-use std::io::Cursor;
+use std::io::{Cursor, Error};
+use std::result::{Result};
 
 extern crate num_bigint as bigint;
 extern crate num_traits;
@@ -211,4 +212,20 @@ pub fn repeated_xor(text: Vec<u8>, key: Vec<u8>) -> Vec<u8> {
         if idx == key.len() {idx = 0};
     }
     return cipher;
+}
+
+pub fn hamming_distance(string_1: Vec<u8>, string_2: Vec<u8>) -> Result<u32, Error>
+{
+    let mut cur1 = Cursor::new(&string_1);
+    let mut read1 = BitReader::endian(&mut cur1, BigEndian);
+    let mut cur2 = Cursor::new(&string_2);
+    let mut read2 = BitReader::endian(&mut cur2, BigEndian);
+
+    let mut distance = 0;
+    for _ in 0..(string_1.len() * 8) {
+        let res = read1.read_bit()? ^ read2.read_bit()?;
+        if res {distance += 1};
+    }
+
+    Ok(distance)
 }

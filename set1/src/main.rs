@@ -85,10 +85,22 @@ fn challenge5() {
     print_challenge_result(5, cipher == expected_result);
 }
 
+fn challenge6() {
+    let string_1 = b"this is a test".to_vec();
+    let string_2 = b"wokka wokka!!!".to_vec();
+    let _err = b"use to demonstrate mismatched lengths".to_vec();
+    use common::hamming_distance;
+    match hamming_distance(string_1, string_2) {
+        Ok(d) => println!("{}", d),
+        Err(e) => println!("Error: {}. Buffers are most likely mismatched byte lengths", e)
+    } 
+}
+
 fn main() {
-    challenge1();
-    challenge2();
-    challenge3();
-    challenge4();
-    challenge5();
+    // challenge1();
+    // challenge2();
+    // challenge3();
+    // challenge4();
+    // challenge5();
+    challenge6();
 }
