@@ -95,7 +95,7 @@ fn challenge6() {
     use common::{read_file_into_buffer, find_key_size};
     let file_data = read_file_into_buffer("6.txt").unwrap();
 
-    let key_size = find_key_size(&file_data, (2, 40), 4).unwrap();
+    let key_size = find_key_size(&file_data, (2, 40), 20).unwrap();
 
     println!("{}", key_size);
 }
