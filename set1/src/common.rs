@@ -199,3 +199,16 @@ pub fn find_single_char_key(cryptogram: &Vec<u8>) -> u8 {
 
     return key;
 }
+
+pub fn repeated_xor(text: Vec<u8>, key: Vec<u8>) -> Vec<u8> {
+
+    let mut idx = 0;
+    let mut cipher: Vec<u8> = vec![];
+    for val in 0..text.len() {
+        cipher.push(text[val] as u8 ^ key[idx]);
+
+        idx += 1;
+        if idx == key.len() {idx = 0};
+    }
+    return cipher;
+}
