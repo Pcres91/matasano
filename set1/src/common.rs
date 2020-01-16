@@ -1,17 +1,30 @@
 #![allow(dead_code)]
 
-use std::io::{Cursor};
-use bitstream_io::{BitReader, BitWriter, BigEndian};
+use bitstream_io::{BigEndian, BitReader, BitWriter};
+use std::io::Cursor;
 
 extern crate num_bigint as bigint;
 extern crate num_traits;
 
 use bigint::BigUint;
 
+use std::fmt;
+
+pub struct Wrap(pub Vec<u8>);
+
+impl fmt::Display for Wrap {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for &byte in &self.0 {
+            write!(f, "{}", byte as char)?;
+        }
+        Ok(())
+    }
+}
+
 pub fn print_challenge_result(challenge_num: u32, success: bool) {
     match success {
         true => println!("SUCCESSFUL: Challenge {}", challenge_num),
-        false => println!("FAILED: Challenge {}", challenge_num)
+        false => println!("FAILED: Challenge {}", challenge_num),
     }
 }
 
@@ -24,13 +37,11 @@ pub fn base64_pretty_print(bytes: Vec<u8>) -> String {
 }
 
 pub fn base64_encode(bytes: Vec<u8>) -> Vec<char> {
-
     let num_bits = bytes.len() * 8;
     let num_chars = num_bits / 6;
 
     let mut cursor = Cursor::new(&bytes);
     let mut reader = BitReader::endian(&mut cursor, BigEndian);
-    
     let mut v = vec![];
     for _i in 0..num_chars {
         // must be a better way to loop through the length of reader.
@@ -56,32 +67,35 @@ pub fn get_base64_rep(byte: u8) -> Option<char> {
     //digits
     else if byte <= 61 {
         return Some((0x30 + byte - 52) as char);
-    }
-    else if byte == 62 {
+    } else if byte == 62 {
         return Some('+');
-    }
-    else {
+    } else {
         return Some('/');
     }
 }
 
+pub fn hex_decode_string(string: String) -> Vec<u8> {
+    return hex_decode_bytes(string.into_bytes());
+}
+
 // converts the ascii chars for strings into their hex equivalents.
 // eg: "abcd" -> vec![11, 12, 13, 14]
-pub fn hex_decode_string(bytes: Vec<u8>) -> Vec<u8> {
+pub fn hex_decode_bytes(bytes: Vec<u8>) -> Vec<u8> {
     let n = BigUint::parse_bytes(bytes.as_slice(), 16).unwrap();
     return n.to_bytes_be();
 }
 
 #[allow(dead_code)]
 fn biguint_to_base64(bytes: &BigUint) -> Vec<char> {
-
     // determine padding length
     let num_bits = bytes.bits();
     let padding: bool = num_bits % 6 != 0;
     let num_chars: usize = num_bits / 6;
 
-    println!("num_bits {}, padding {}, num_chars {}",
-        num_bits, padding, num_chars);
+    println!(
+        "num_bits {}, padding {}, num_chars {}",
+        num_bits, padding, num_chars
+    );
 
     let bitmask: u8 = 0b0011_1111;
 
@@ -127,8 +141,7 @@ pub fn xor_bytes(left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
 
 // performs a per-bit operation using bitstreams.Bit of overkill
 #[allow(dead_code)]
-pub fn xor_bits(left: Vec<u8>, right: Vec<u8>) -> Vec<u8>
-{
+pub fn xor_bits(left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
     let mut l_cur = Cursor::new(&left);
     let mut l_reader = BitReader::endian(&mut l_cur, BigEndian);
 
@@ -140,19 +153,49 @@ pub fn xor_bits(left: Vec<u8>, right: Vec<u8>) -> Vec<u8>
     let num_bits = left.len() * 8;
 
     for _i in 0..num_bits {
-        let res:bool = l_reader.read_bit().unwrap() ^ r_reader.read_bit().unwrap();
+        let res: bool = l_reader.read_bit().unwrap() ^ r_reader.read_bit().unwrap();
         writer.write_bit(res).unwrap();
     }
 
     return writer.into_writer();
 }
 
-pub fn single_byte_xor(message: &Vec<u8> , byte: u8) -> Vec<u8> {
+pub fn single_byte_xor(message: &Vec<u8>, byte: u8) -> Vec<u8> {
     let mut res = Vec::new();
 
     for message_byte in message {
         res.push(message_byte ^ byte);
     }
 
-    return res
+    return res;
+}
+
+pub fn get_common_letter_frequencies(msg: &Vec<u8>) -> u32 {
+    let most_common_letters = vec!['e', 't', 'a', 'o', 'i', 'n'];
+
+    let mut freq_count = 0;
+    for &byte in msg {
+        let val = byte as char;
+        if most_common_letters.contains(&val) {
+            freq_count += 1;
+        }
+    }
+
+    return freq_count;
+}
+
+pub fn find_single_char_key(cryptogram: &Vec<u8>) -> u8 {
+    let mut max_count: u32 = 0;
+    let mut key: u8 = 0x0;
+
+    for poss_key in 0..(0xffu32 + 1) {
+        let decoded_msg = single_byte_xor(&cryptogram, poss_key as u8);
+        let freq_count = get_common_letter_frequencies(&decoded_msg);
+        if freq_count > max_count {
+            max_count = freq_count;
+            key = poss_key as u8;
+        }
+    }
+
+    return key;
 }
