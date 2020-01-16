@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 
 use bitstream_io::{BigEndian, BitReader, BitWriter};
-use std::fs::File;
 use std::io::Cursor;
-use std::io::{self, prelude::*, BufReader};
 
 extern crate num_bigint as bigint;
 extern crate num_traits;
@@ -200,28 +198,4 @@ pub fn find_single_char_key(cryptogram: &Vec<u8>) -> u8 {
     }
 
     return key;
-}
-
-pub fn challenge4() -> io::Result<()> {
-    let file = File::open("4.txt")?;
-    let reader = BufReader::new(file);
-
-    let mut found_message: (u32, u8, Vec<u8>) = (0, 0, vec![]);
-    for line in reader.lines() {
-        let copy = line?;
-        let bytes = hex_decode_string(copy);
-        let key = find_single_char_key(&bytes);
-        let msg = single_byte_xor(&bytes, key);
-        let freq_count = get_common_letter_frequencies(&msg);
-        if freq_count > found_message.0 {
-            found_message = (freq_count, key, msg);
-        }
-    }
-
-    for val in found_message.2 {
-        print!("{}", val as char);
-    }
-    println!();
-
-    Ok(())
 }
