@@ -2,7 +2,7 @@
 
 use bitstream_io::{BigEndian, BitReader, BitWriter};
 use std::io::{Cursor, Error};
-use std::result::{Result};
+use std::result::Result;
 
 extern crate num_bigint as bigint;
 extern crate num_traits;
@@ -25,8 +25,7 @@ impl fmt::Display for Wrap {
 pub fn print_challenge_result(challenge_num: u32, success: bool) {
     if success {
         println!("SUCCESSFUL: Challenge {}", challenge_num)
-    }
-    else {
+    } else {
         println!("FAILED: Challenge {}", challenge_num)
     }
 }
@@ -205,21 +204,21 @@ pub fn find_single_char_key(cryptogram: &[u8]) -> u8 {
 }
 
 pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
-
     let mut idx = 0;
     let mut cipher: Vec<u8> = vec![];
     for val in text {
         cipher.push(val ^ key[idx]);
 
         idx += 1;
-        if idx == key.len() {idx = 0};
+        if idx == key.len() {
+            idx = 0
+        };
     }
 
     cipher
 }
 
-pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<u32, Error>
-{
+pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<u32, Error> {
     let mut cur1 = Cursor::new(&string_1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
     let mut cur2 = Cursor::new(&string_2);
@@ -228,7 +227,9 @@ pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<u32, Error>
     let mut distance = 0;
     for _ in 0..(string_1.len() * 8) {
         let res = read1.read_bit()? ^ read2.read_bit()?;
-        if res {distance += 1};
+        if res {
+            distance += 1
+        };
     }
 
     Ok(distance)

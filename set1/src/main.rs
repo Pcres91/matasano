@@ -32,9 +32,8 @@ fn challenge2() {
 fn challenge3() {
     use common::hex_decode_bytes;
     let expected_result = "Cooking MC's like a pound of bacon";
-    let cipher = hex_decode_bytes(
-        b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736",
-    );
+    let cipher =
+        hex_decode_bytes(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
     // let expected_result = "I'm killing your brain like a poisonous mushroom".to_string();
     // let cipher = hex_decode_bytes(b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec());
 
@@ -71,12 +70,11 @@ fn challenge4() {
 }
 
 fn challenge5() {
-    let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal".to_vec();
-
-    let key = b"ICE".to_vec();
+    let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
+    let key = b"ICE";
 
     use common::repeated_xor;
-    let cipher = repeated_xor(&plain_text, &key);
+    let cipher = repeated_xor(plain_text, key);
 
     use common::hex_decode_bytes;
     let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f");
