@@ -218,7 +218,19 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     cipher
 }
 
-pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<u32, Error> {
+pub fn read_file_into_buffer(filepath: &str) -> Result<Vec<u8>, Error> {
+    use std::fs::File;
+    use std::io::Read;
+
+    let mut file = File::open(filepath)?;
+
+    let mut data = Vec::new();
+    file.read_to_end(&mut data)?;
+
+    Ok(data)
+}
+
+pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize, Error> {
     let mut cur1 = Cursor::new(&string_1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
     let mut cur2 = Cursor::new(&string_2);
@@ -235,27 +247,26 @@ pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<u32, Error> 
     Ok(distance)
 }
 
-pub fn read_file_into_buffer(filepath: &str) -> Result<Vec<u8>, Error> {
-    use std::fs::File;
-    use std::io::Read;
+pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -> Result<f32, Error> {
+    let mut sum_distances = 0usize;
+    for i in 0..num_blocks {
+        let idx = i * key_length;
+        sum_distances += hamming_distance(
+                &data[idx .. (idx + key_length)],
+                &data[(idx + key_length) .. (idx + 2 * key_length)]
+            )?;
+    }
 
-    let mut file = File::open(filepath)?;
-
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)?;
-
-    Ok(data)
+    let normalised_distance_sum = sum_distances as f32 / key_length as f32;
+    let average_distance = normalised_distance_sum / num_blocks as f32;
+    Ok(average_distance)
 }
 
-pub fn get_average_distance(data: &[u8], key_length: u32, num_blocks: u32) -> u32 {
-    0
-}
-
-pub fn find_key_size(data: &[u8], key_range: (u32, u32), num_blocks: u32) -> u32 {
-    let mut min_distance = std::u32::MAX;
+pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) -> Result<usize, Error> {
+    let mut min_distance = std::f32::MAX;
     let mut key_size = key_range.0;
     for key_length in key_range.0..=key_range.1 {
-        let distance = get_average_distance(&data, key_length, num_blocks);
+        let distance = get_average_distance(&data, key_length, num_blocks)?;
 
         if distance < min_distance {
             min_distance = distance;
@@ -263,5 +274,5 @@ pub fn find_key_size(data: &[u8], key_range: (u32, u32), num_blocks: u32) -> u32
         }
     }
 
-    key_size
+    Ok(key_size)
 }

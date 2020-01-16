@@ -92,16 +92,19 @@ fn challenge6() {
     //     Err(e) => println!("Error: {}. Buffers are most likely mismatched byte lengths", e)
     // }
 
-    let file_data = common::read_file_into_buffer("6.txt").unwrap();
+    use common::{read_file_into_buffer, find_key_size};
+    let file_data = read_file_into_buffer("6.txt").unwrap();
 
-    println!("{}", Wrap(file_data));
+    let key_size = find_key_size(&file_data, (2, 40), 4).unwrap();
+
+    println!("{}", key_size);
 }
 
 fn main() {
-    challenge1();
-    challenge2();
-    challenge3();
-    challenge4();
-    challenge5();
+    // challenge1();
+    // challenge2();
+    // challenge3();
+    // challenge4();
+    // challenge5();
     challenge6();
 }
