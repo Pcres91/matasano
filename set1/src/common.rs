@@ -10,6 +10,19 @@ extern crate num_traits;
 
 use bigint::BigUint;
 
+use std::fmt;
+
+pub struct Wrap(pub Vec<u8>);
+
+impl fmt::Display for Wrap {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for &byte in &self.0 {
+            write!(f, "{}", byte as char)?;
+        }
+        Ok(())
+    }
+}
+
 pub fn print_challenge_result(challenge_num: u32, success: bool) {
     match success {
         true => println!("SUCCESSFUL: Challenge {}", challenge_num),
@@ -193,19 +206,19 @@ pub fn challenge4() -> io::Result<()> {
     let file = File::open("4.txt")?;
     let reader = BufReader::new(file);
 
-    let mut found_cipher: (u32, u8, Vec<u8>) = (0, 0, vec![]);
+    let mut found_message: (u32, u8, Vec<u8>) = (0, 0, vec![]);
     for line in reader.lines() {
         let copy = line?;
         let bytes = hex_decode_string(copy);
         let key = find_single_char_key(&bytes);
         let msg = single_byte_xor(&bytes, key);
         let freq_count = get_common_letter_frequencies(&msg);
-        if freq_count > found_cipher.0 {
-            found_cipher = (freq_count, key, msg);
+        if freq_count > found_message.0 {
+            found_message = (freq_count, key, msg);
         }
     }
 
-    for val in found_cipher.2 {
+    for val in found_message.2 {
         print!("{}", val as char);
     }
     println!();

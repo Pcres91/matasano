@@ -1,19 +1,6 @@
 mod common;
 
-use common::{hex_decode_bytes, print_challenge_result};
-
-use std::fmt;
-
-pub struct Wrap(Vec<u8>);
-
-impl fmt::Display for Wrap {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for &byte in &self.0 {
-            write!(f, "{}", byte as char)?;
-        }
-        Ok(())
-    }
-}
+use common::{hex_decode_bytes, print_challenge_result, Wrap};
 
 fn challenge1() {
     let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec();
@@ -56,9 +43,14 @@ fn challenge4() {
     let _result = common::challenge4();
 }
 
+fn challenge5() {
+    let _plain_text = "Burning 'em, if you ain't quick and nimble".to_string();
+}
+
 fn main() {
     challenge1();
     challenge2();
     challenge3();
     challenge4();
+    challenge5();
 }
