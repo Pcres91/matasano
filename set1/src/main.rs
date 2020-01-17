@@ -99,7 +99,7 @@ fn challenge6() {
 
     // let cipher = read_file_into_buffer("6.txt").unwrap();
 
-    let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbalAnd a hi hat with a souped up tempo\nI'm on a roll and it's time to go solo";
+    let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal\nAnd a hi hat with a souped up tempo\nI'm on a roll and it's time to go solo";
     let key = b"ICE";
 
     use common::repeated_xor;
@@ -107,7 +107,9 @@ fn challenge6() {
 
     // println!("{:x?}", &cipher[0..5]);
 
-    let key_sizes = find_key_size(&cipher, (2, 10), 12).unwrap();
+    // let key_sizes = find_key_size(&cipher, (2, 10), 12).unwrap();
+
+    let key_sizes = vec![3];
 
     for key_size in key_sizes {
         let sliced_data = slice_by_byte(&cipher, key_size);
@@ -117,8 +119,10 @@ fn challenge6() {
         // println!("{:2x?}", &sliced_data[&0]);
 
         let key = find_repeated_key(&sliced_data);
+        // let key = b"ICE";
 
-        // let result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
+        let result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
+        println!("{}", result);
         println!("{}\n{}", key.len(), Wrap(key));
     }
 
