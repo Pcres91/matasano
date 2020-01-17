@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use bitstream_io::{BigEndian, BitReader, BitWriter};
+use std::collections::HashMap;
 use std::io::{Cursor, Error};
 use std::result::Result;
 
@@ -8,6 +8,7 @@ extern crate num_bigint as bigint;
 extern crate num_traits;
 
 use bigint::BigUint;
+use bitstream_io::{BigEndian, BitReader, BitWriter};
 
 use std::fmt;
 
@@ -247,14 +248,18 @@ pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize, Error
     Ok(distance)
 }
 
-pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -> Result<f32, Error> {
+pub fn get_average_distance(
+    data: &[u8],
+    key_length: usize,
+    num_blocks: usize,
+) -> Result<f32, Error> {
     let mut sum_distances = 0usize;
     for i in 0..num_blocks {
         let idx = i * key_length;
         sum_distances += hamming_distance(
-                &data[idx .. (idx + key_length)],
-                &data[(idx + key_length) .. (idx + 2 * key_length)]
-            )?;
+            &data[idx..(idx + key_length)],
+            &data[(idx + key_length)..(idx + 2 * key_length)],
+        )?;
     }
 
     let normalised_distance_sum = sum_distances as f32 / key_length as f32;
@@ -262,7 +267,11 @@ pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -
     Ok(average_distance)
 }
 
-pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) -> Result<usize, Error> {
+pub fn find_key_size(
+    data: &[u8],
+    key_range: (usize, usize),
+    num_blocks: usize,
+) -> Result<Vec<usize>, Error> {
     let mut distances: Vec<(f32, usize)> = vec![];
 
     for key_length in key_range.0..=key_range.1 {
@@ -272,6 +281,34 @@ pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) 
     }
 
     distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-    // println!("{:?}", distances);
-    Ok(distances[0].1)
+    println!("{:?}", distances);
+    let distances_only: Vec<usize> = distances.iter().map(|a| a.1).collect();
+    Ok(distances_only)
+    // Ok(vec![distances[0].1, distances[1].1, distances[2].1])
+}
+
+pub fn slice_by_byte(data: &[u8], key_size: usize) -> HashMap<usize, Vec<u8>> {
+    let mut sliced_data = HashMap::new();
+
+    for key_idx in 0..key_size {
+        let mut slice: Vec<u8> = vec![];
+        let mut idx = key_idx;
+        while idx < data.len() {
+            slice.push(data[idx]);
+            idx += key_size;
+        }
+        sliced_data.insert(key_idx, slice);
+    }
+
+    sliced_data
+}
+
+pub fn find_repeated_key(data: &HashMap<usize, Vec<u8>>) -> Vec<u8> {
+    let mut res = Vec::new();
+
+    for (_, byte_data) in data {
+        res.push(find_single_char_key(&byte_data));
+    }
+
+    res
 }

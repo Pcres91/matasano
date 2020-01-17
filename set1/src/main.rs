@@ -87,17 +87,42 @@ fn challenge6() {
     // let string_2 = b"wokka wokka!!!".to_vec();
     // let _err = b"use to demonstrate mismatched lengths".to_vec();
     // use common::hamming_distance;
-    // match hamming_distance(string_1, string_2) {
+    // match hamming_distance(&string_1, &string_2) {
     //     Ok(d) => println!("{}", d),
-    //     Err(e) => println!("Error: {}. Buffers are most likely mismatched byte lengths", e)
+    //     Err(e) => println!(
+    //         "Error: {}. Buffers are most likely mismatched byte lengths",
+    //         e
+    //     ),
     // }
 
-    use common::{read_file_into_buffer, find_key_size};
-    let file_data = read_file_into_buffer("6.txt").unwrap();
+    use common::{find_key_size, find_repeated_key, read_file_into_buffer, slice_by_byte};
 
-    let key_size = find_key_size(&file_data, (2, 40), 20).unwrap();
+    // let cipher = read_file_into_buffer("6.txt").unwrap();
 
-    println!("{}", key_size);
+    let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbalAnd a hi hat with a souped up tempo\nI'm on a roll and it's time to go solo";
+    let key = b"ICE";
+
+    use common::repeated_xor;
+    let cipher = repeated_xor(plain_text, key);
+
+    // println!("{:x?}", &cipher[0..5]);
+
+    let key_sizes = find_key_size(&cipher, (2, 10), 12).unwrap();
+
+    for key_size in key_sizes {
+        let sliced_data = slice_by_byte(&cipher, key_size);
+
+        // let first_section = sliced_data[&0];
+
+        // println!("{:2x?}", &sliced_data[&0]);
+
+        let key = find_repeated_key(&sliced_data);
+
+        // let result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
+        println!("{}\n{}", key.len(), Wrap(key));
+    }
+
+    // println!("{}", result);
 }
 
 fn main() {
