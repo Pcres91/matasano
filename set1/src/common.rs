@@ -24,13 +24,13 @@ impl fmt::Display for Wrap {
 }
 
 pub fn print_challenge_result(challenge_num: u32, success: bool, message: Option<&str>) {
-    let mut mess = String::new();
-    match message {
-        Some(m) => mess = ": ".to_string() + m,
-        None => {}
+    let mut msg = String::new();
+    if let Some(m) = message {
+        msg = ": ".to_string() + m
     }
+
     if success {
-        println!("SUCCESSFUL: Challenge {}{}", challenge_num, mess)
+        println!("SUCCESSFUL: Challenge {}{}", challenge_num, msg)
     } else {
         println!("FAILED: Challenge {}", challenge_num)
     }
@@ -224,10 +224,10 @@ pub fn single_byte_xor(message: &[u8], byte: u8) -> Vec<u8> {
 
 fn ascii_to_uppercase(chr: u8) -> u8 {
     if chr >= 97 && chr <= 122 {
-        return chr - (97-65);
+        return chr - (97 - 65);
     };
 
-    return chr;
+    chr
 }
 
 pub fn get_common_letter_frequencies(msg: &[u8]) -> i32 {

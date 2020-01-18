@@ -91,15 +91,17 @@ fn challenge6() {
 
     let sliced_data = slice_by_byte(&cipher, key_size);
 
-    let key: Vec<u8> = sliced_data.iter().map(|x| find_single_char_key(x)).collect();
+    let key: Vec<u8> = sliced_data
+        .iter()
+        .map(|x| find_single_char_key(x))
+        .collect();
 
     let _result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
-    
     print_challenge_result(6, true, Some(&Wrap(key).to_string()));
 }
 
 use std::io::Error;
-fn main() -> Result<(), Error>{
+fn main() -> Result<(), Error> {
     challenge1();
     challenge2();
     challenge3();
