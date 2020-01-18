@@ -13,7 +13,7 @@ fn challenge1() {
     let expected_result =
         "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
 
-    print_challenge_result(1, encoded == expected_result);
+    print_challenge_result(1, encoded == expected_result, None)
 }
 
 fn challenge2() {
@@ -26,7 +26,7 @@ fn challenge2() {
 
     let expected_result = hex_decode_bytes(b"746865206b696420646f6e277420706c6179");
 
-    print_challenge_result(2, result == expected_result);
+    print_challenge_result(2, result == expected_result, None);
 }
 
 fn challenge3() {
@@ -41,7 +41,7 @@ fn challenge3() {
 
     let result = Wrap(common::single_byte_xor(&cipher, key)).to_string();
 
-    print_challenge_result(3, result == expected_result);
+    print_challenge_result(3, result == expected_result, None);
 }
 
 fn challenge4() {
@@ -54,7 +54,7 @@ fn challenge4() {
     let file = File::open("4.txt").unwrap();
     let reader = BufReader::new(file);
 
-    let mut found_message: (u32, u8, Vec<u8>) = (0, 0, vec![]);
+    let mut found_message: (i32, u8, Vec<u8>) = (0, 0, vec![]);
     for line in reader.lines() {
         let copy = line.unwrap();
         let bytes = hex_decode_string(&copy);
@@ -66,7 +66,7 @@ fn challenge4() {
         }
     }
 
-    print!("SUCCESSFUL: Challenge 4: {}", Wrap(found_message.2));
+    print_challenge_result(4, true, Some(&Wrap(found_message.2).to_string()))
 }
 
 fn challenge5() {
@@ -79,61 +79,33 @@ fn challenge5() {
     use common::hex_decode_bytes;
     let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f");
 
-    print_challenge_result(5, cipher == expected_result);
+    print_challenge_result(5, cipher == expected_result, None);
 }
 
 fn challenge6() {
-    // let string_1 = b"this is a test".to_vec();
-    // let string_2 = b"wokka wokka!!!".to_vec();
-    // let _err = b"use to demonstrate mismatched lengths".to_vec();
-    // use common::hamming_distance;
-    // match hamming_distance(&string_1, &string_2) {
-    //     Ok(d) => println!("{}", d),
-    //     Err(e) => println!(
-    //         "Error: {}. Buffers are most likely mismatched byte lengths",
-    //         e
-    //     ),
-    // }
+    use common::{find_key_size, find_single_char_key, read_file_into_buffer, slice_by_byte};
 
-    use common::{find_key_size, find_repeated_key, read_file_into_buffer, slice_by_byte};
+    let cipher = read_file_into_buffer("6.txt").unwrap();
 
-    // let cipher = read_file_into_buffer("6.txt").unwrap();
+    let key_size = find_key_size(&cipher, (2, 40), 20).unwrap();
 
-    let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal\nAnd a hi hat with a souped up tempo\nI'm on a roll and it's time to go solo";
-    let key = b"ICE";
+    let sliced_data = slice_by_byte(&cipher, key_size);
 
-    use common::repeated_xor;
-    let cipher = repeated_xor(plain_text, key);
+    let key: Vec<u8> = sliced_data.iter().map(|x| find_single_char_key(x)).collect();
 
-    // println!("{:x?}", &cipher[0..5]);
-
-    // let key_sizes = find_key_size(&cipher, (2, 10), 12).unwrap();
-
-    let key_sizes = vec![3];
-
-    for key_size in key_sizes {
-        let sliced_data = slice_by_byte(&cipher, key_size);
-
-        // let first_section = sliced_data[&0];
-
-        // println!("{:2x?}", &sliced_data[&0]);
-
-        let key = find_repeated_key(&sliced_data);
-        // let key = b"ICE";
-
-        let result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
-        println!("{}", result);
-        println!("{}\n{}", key.len(), Wrap(key));
-    }
-
-    // println!("{}", result);
+    let _result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
+    
+    print_challenge_result(6, true, Some(&Wrap(key).to_string()));
 }
 
-fn main() {
-    // challenge1();
-    // challenge2();
-    // challenge3();
-    // challenge4();
-    // challenge5();
+use std::io::Error;
+fn main() -> Result<(), Error>{
+    challenge1();
+    challenge2();
+    challenge3();
+    challenge4();
+    challenge5();
     challenge6();
+
+    Ok(())
 }

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::{Cursor, Error};
 use std::result::Result;
 
@@ -23,9 +23,14 @@ impl fmt::Display for Wrap {
     }
 }
 
-pub fn print_challenge_result(challenge_num: u32, success: bool) {
+pub fn print_challenge_result(challenge_num: u32, success: bool, message: Option<&str>) {
+    let mut mess = String::new();
+    match message {
+        Some(m) => mess = ": ".to_string() + m,
+        None => {}
+    }
     if success {
-        println!("SUCCESSFUL: Challenge {}", challenge_num)
+        println!("SUCCESSFUL: Challenge {}{}", challenge_num, mess)
     } else {
         println!("FAILED: Challenge {}", challenge_num)
     }
@@ -87,6 +92,49 @@ pub fn hex_decode_string(string: &str) -> Vec<u8> {
 pub fn hex_decode_bytes(bytes: &[u8]) -> Vec<u8> {
     let n = BigUint::parse_bytes(bytes, 16).unwrap();
     n.to_bytes_be()
+}
+
+// decodes a char into its base64 representation. If it doesn't have one, returns None
+fn decode_char_to_base64(byte: u8) -> Option<u8> {
+    // capitals
+    if byte >= 65 && byte <= 90 {
+        Some(byte - 65)
+    }
+    // lowercase
+    else if byte >= 97 && byte <= 122 {
+        Some(byte - 71)
+    }
+    // digits
+    else if byte >= 48 && byte <= 57 {
+        Some(byte + 4)
+    }
+    // +
+    else if byte as char == '+' {
+        Some(62)
+    }
+    // /
+    else if byte as char == '/' {
+        Some(63)
+    }
+    // padding returns none
+    else {
+        println!("Gonna panic on char {}: {}", byte as char, byte);
+        None
+    }
+}
+
+pub fn base64_decode(data: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut writer = BitWriter::endian(Vec::new(), BigEndian);
+
+    for &byte in data {
+        if byte as char == '=' {
+            break;
+        } else {
+            writer.write(6, decode_char_to_base64(byte).unwrap())?;
+        }
+    }
+
+    Ok(writer.into_writer())
 }
 
 #[allow(dead_code)]
@@ -174,14 +222,47 @@ pub fn single_byte_xor(message: &[u8], byte: u8) -> Vec<u8> {
     res
 }
 
-pub fn get_common_letter_frequencies(msg: &[u8]) -> u32 {
-    let most_common_letters = vec!['e', 't', 'a', 'o', 'i', 'n'];
+fn ascii_to_uppercase(chr: u8) -> u8 {
+    if chr >= 97 && chr <= 122 {
+        return chr - (97-65);
+    };
+
+    return chr;
+}
+
+pub fn get_common_letter_frequencies(msg: &[u8]) -> i32 {
+    // list of the most frequent ASCII characters
+    // without characters or punctuation. For long texts
+    // this should be sufficient
+    // shamelessly stolen from
+    // http://www.fitaly.com/board/domper3/posts/136.html
+    // [101, 32, 116, 111, 97, 110, 105, 115, 114, 108]     4
+    // [104, 100, 99, 117, 109, 103, 112, 46, 45, 102]      3
+    // [119, 121, 98, 118, 44, 107, 149, 48, 49, 58]        2
+    // [83, 67, 77, 84, 73, 68, 65, 69, 80, 87]             1
+    // [82, 39, 34, 72, 41, 40, 66, 78, 120, 76]            0
+    // [71, 51, 79, 74, 53, 47, 63, 70, 52, 62]            -1
+    // [60, 59, 95, 54, 56, 55, 57, 86, 106, 85]           -2
+    // [113, 75, 42, 122, 36, 88, 81, 89, 61, 38]          -3
+    // [43, 35, 37, 93, 91, 90, 64, 33, 9, 125]            -4
+    // [92, 183, 96, 124, 126, 237]                        -5
 
     let mut freq_count = 0;
     for &byte in msg {
-        let val = byte as char;
-        if most_common_letters.contains(&val) {
+        if [101, 32, 116, 111, 97, 110, 105, 115, 114, 108].contains(&byte) {
+            freq_count += 8;
+        } else if [104, 100, 99, 117, 109, 103, 112, 46, 45, 102].contains(&byte) {
+            freq_count += 4;
+        } else if [119, 121, 98, 118, 44, 107, 149, 48, 49, 58].contains(&byte) {
+            freq_count += 2;
+        } else if [83, 67, 77, 84, 73, 68, 65, 69, 80, 87].contains(&byte) {
             freq_count += 1;
+        } else if [43, 35, 37, 93, 91, 90, 64, 33, 9, 125].contains(&byte) {
+            freq_count -= 4;
+        } else if [92, 183, 96, 124, 126, 237].contains(&byte) {
+            freq_count -= 8;
+        } else if byte <= 12 {
+            freq_count -= 20;
         }
     }
 
@@ -189,19 +270,15 @@ pub fn get_common_letter_frequencies(msg: &[u8]) -> u32 {
 }
 
 pub fn find_single_char_key(cryptogram: &[u8]) -> u8 {
-    let mut max_count: u32 = 0;
-    let mut key: u8 = 0x0;
-
-    for poss_key in 0..=0xffu32 {
-        let decoded_msg = single_byte_xor(&cryptogram, poss_key as u8);
+    let mut possible_keys: Vec<(i32, u8)> = Vec::new();
+    for possible_key in 0..=0xffu32 {
+        let decoded_msg = single_byte_xor(&cryptogram, possible_key as u8);
         let freq_count = get_common_letter_frequencies(&decoded_msg);
-        if freq_count > max_count {
-            max_count = freq_count;
-            key = poss_key as u8;
-        }
+        possible_keys.push((freq_count, possible_key as u8));
     }
-
-    key
+    possible_keys.sort_by_key(|&k| std::cmp::Reverse(k.0));
+    // println!("{:?}", &possible_keys[0..20]);
+    possible_keys[0].1
 }
 
 pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
@@ -221,12 +298,15 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
 
 pub fn read_file_into_buffer(filepath: &str) -> Result<Vec<u8>, Error> {
     use std::fs::File;
-    use std::io::Read;
+    use std::io::{prelude::*, BufReader};
 
-    let mut file = File::open(filepath)?;
+    let file = File::open(filepath)?;
+    let reader = BufReader::new(file);
 
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)?;
+    let mut data: Vec<u8> = Vec::new();
+    for line in reader.lines() {
+        data.extend_from_slice(&base64_decode(line?.as_bytes())?);
+    }
 
     Ok(data)
 }
@@ -271,7 +351,7 @@ pub fn find_key_size(
     data: &[u8],
     key_range: (usize, usize),
     num_blocks: usize,
-) -> Result<Vec<usize>, Error> {
+) -> Result<usize, Error> {
     let mut distances: Vec<(f32, usize)> = vec![];
 
     for key_length in key_range.0..=key_range.1 {
@@ -281,14 +361,29 @@ pub fn find_key_size(
     }
 
     distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-    println!("{:?}", distances);
-    let distances_only: Vec<usize> = distances.iter().map(|a| a.1).collect();
-    Ok(distances_only)
-    // Ok(vec![distances[0].1, distances[1].1, distances[2].1])
+    // println!("{:?}", distances);
+    // let distances_only: Vec<usize> = distances.iter().map(|a| a.1).collect();
+    Ok(distances[0].1)
 }
 
-pub fn slice_by_byte(data: &[u8], key_size: usize) -> HashMap<usize, Vec<u8>> {
-    let mut sliced_data = HashMap::new();
+pub fn slice_by_byte(data: &[u8], key_size: usize) -> Vec<Vec<u8>> {
+    let mut sliced_data = Vec::new();
+
+    for key_idx in 0..key_size {
+        let mut slice: Vec<u8> = vec![];
+        let mut idx = key_idx;
+        while idx < data.len() {
+            slice.push(data[idx]);
+            idx += key_size;
+        }
+        sliced_data.push(slice);
+    }
+
+    sliced_data
+}
+
+pub fn slice_by_byte_with_idx(data: &[u8], key_size: usize) -> BTreeMap<usize, Vec<u8>> {
+    let mut sliced_data = BTreeMap::new();
 
     for key_idx in 0..key_size {
         let mut slice: Vec<u8> = vec![];
@@ -301,14 +396,4 @@ pub fn slice_by_byte(data: &[u8], key_size: usize) -> HashMap<usize, Vec<u8>> {
     }
 
     sliced_data
-}
-
-pub fn find_repeated_key(data: &HashMap<usize, Vec<u8>>) -> Vec<u8> {
-    let mut res = Vec::new();
-
-    for (_, byte_data) in data {
-        res.push(find_single_char_key(&byte_data));
-    }
-
-    res
 }
