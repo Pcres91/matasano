@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 use std::io::{Cursor, Error};
 use std::result::Result;
@@ -222,6 +220,7 @@ pub fn single_byte_xor(message: &[u8], byte: u8) -> Vec<u8> {
     res
 }
 
+#[allow(dead_code)]
 fn ascii_to_uppercase(chr: u8) -> u8 {
     if chr >= 97 && chr <= 122 {
         return chr - (97 - 65);
@@ -382,6 +381,7 @@ pub fn slice_by_byte(data: &[u8], key_size: usize) -> Vec<Vec<u8>> {
     sliced_data
 }
 
+#[allow(dead_code)]
 pub fn slice_by_byte_with_idx(data: &[u8], key_size: usize) -> BTreeMap<usize, Vec<u8>> {
     let mut sliced_data = BTreeMap::new();
 

@@ -3,11 +3,10 @@ mod common;
 use common::{print_challenge_result, Wrap};
 
 fn challenge1() {
-    use common::hex_decode_bytes;
+    use common::{hex_decode_bytes, base64_pretty_print};
     let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let bytes = hex_decode_bytes(n); // vec![0x49, 0x27, 0x6d, 0x20, ...]
 
-    use common::base64_pretty_print;
     let encoded = base64_pretty_print(&bytes);
 
     let expected_result =
@@ -30,16 +29,16 @@ fn challenge2() {
 }
 
 fn challenge3() {
-    use common::hex_decode_bytes;
+    use common::{hex_decode_bytes, find_single_char_key, single_byte_xor};
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher =
         hex_decode_bytes(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
     // let expected_result = "I'm killing your brain like a poisonous mushroom".to_string();
     // let cipher = hex_decode_bytes(b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec());
 
-    let key = common::find_single_char_key(&cipher);
+    let key = find_single_char_key(&cipher);
 
-    let result = Wrap(common::single_byte_xor(&cipher, key)).to_string();
+    let result = Wrap(single_byte_xor(&cipher, key)).to_string();
 
     print_challenge_result(3, result == expected_result, None);
 }
