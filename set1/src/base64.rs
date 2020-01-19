@@ -1,5 +1,5 @@
-use std::io::{Cursor, Error};
 use bitstream_io::{BigEndian, BitReader, BitWriter};
+use std::io::{Cursor, Error};
 
 extern crate num_bigint as bigint;
 use bigint::BigUint;
@@ -35,6 +35,10 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, Error> {
         }
     }
 
+    // into_writer throws away any incomplete bytes.
+    // So, by breaking when the padding '=' is reached,
+    // the padded bits in the previous character are thrown
+    // away. Neato
     Ok(writer.into_writer())
 }
 
@@ -54,7 +58,7 @@ pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>, Error> {
 }
 
 // this converts u8 to base64. If topmost bits aren't 00, returns None
-pub fn encode_byte(byte: u8) -> Option<char> {
+fn encode_byte(byte: u8) -> Option<char> {
     if byte > 63 {
         return None;
     }

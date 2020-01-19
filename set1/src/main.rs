@@ -4,10 +4,11 @@ use std::io::Error;
 mod common;
 use common::{print_challenge_result, Wrap};
 
+mod aes;
 mod base64;
 
 fn challenge1() {
-    use common::{hex_decode_bytes};
+    use common::hex_decode_bytes;
     let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let bytes = hex_decode_bytes(n); // vec![0x49, 0x27, 0x6d, 0x20, ...]
 
@@ -33,7 +34,7 @@ fn challenge2() {
 }
 
 fn challenge3() {
-    use common::{hex_decode_bytes, find_single_char_key, single_byte_xor};
+    use common::{find_single_char_key, hex_decode_bytes, single_byte_xor};
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher =
         hex_decode_bytes(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
@@ -105,6 +106,18 @@ fn challenge6() -> Result<(), Error> {
     Ok(())
 }
 
+fn challenge7() -> Result<(), Error> {
+    use aes::decrypt;
+
+    let cipher = base64::read_encoded_file("7.txt").unwrap();
+
+    let key = b"YELLOW SUBMARINE";
+
+    let _plain_text = decrypt(&cipher, key);
+
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
     challenge1();
     challenge2();
@@ -112,6 +125,7 @@ fn main() -> Result<(), Error> {
     challenge4();
     challenge5();
     challenge6()?;
+    challenge7()?;
 
     Ok(())
 }
