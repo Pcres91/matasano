@@ -1,13 +1,17 @@
 #![allow(dead_code)]
+use std::io::Error;
+
 mod common;
 use common::{print_challenge_result, Wrap};
 
+mod base64;
+
 fn challenge1() {
-    use common::{hex_decode_bytes, base64_pretty_print};
+    use common::{hex_decode_bytes};
     let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let bytes = hex_decode_bytes(n); // vec![0x49, 0x27, 0x6d, 0x20, ...]
 
-    let encoded = base64_pretty_print(&bytes);
+    let encoded = base64::pretty_print(&bytes);
 
     let expected_result =
         "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
@@ -81,10 +85,10 @@ fn challenge5() {
     print_challenge_result(5, cipher == expected_result, None);
 }
 
-fn challenge6() {
-    use common::{find_key_size, find_single_char_key, read_base64_file_into_buffer, slice_by_byte};
+fn challenge6() -> Result<(), Error> {
+    use common::{find_key_size, find_single_char_key, slice_by_byte};
 
-    let cipher = read_base64_file_into_buffer("6.txt").unwrap();
+    let cipher = base64::read_encoded_file("6.txt").unwrap();
 
     let key_size = find_key_size(&cipher, (2, 40), 20).unwrap();
 
@@ -97,24 +101,17 @@ fn challenge6() {
 
     let _result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
     print_challenge_result(6, true, Some(&Wrap(key).to_string()));
+
+    Ok(())
 }
 
-use std::io::Error;
 fn main() -> Result<(), Error> {
-    // challenge1();
-    // challenge2();
-    // challenge3();
-    // challenge4();
-    // challenge5();
-    // challenge6();
-
-    let cipher = common::read_base64_file_into_buffer("7.txt").unwrap();
-
-    use std::fs::File;
-    use std::io::prelude::*;
-    let mut f = File::create("7_dec.txt")?;
-    f.write_all(&cipher)?;
-    f.sync_all()?;
+    challenge1();
+    challenge2();
+    challenge3();
+    challenge4();
+    challenge5();
+    challenge6()?;
 
     Ok(())
 }

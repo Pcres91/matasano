@@ -34,53 +34,6 @@ pub fn print_challenge_result(challenge_num: u32, success: bool, message: Option
     }
 }
 
-fn pretty_print(chars: Vec<char>) -> String {
-    chars.into_iter().collect()
-}
-
-pub fn base64_pretty_print(bytes: &[u8]) -> String {
-    pretty_print(base64_encode(bytes))
-}
-
-pub fn base64_encode(bytes: &[u8]) -> Vec<char> {
-    let num_bits = bytes.len() * 8;
-    let num_chars = num_bits / 6;
-
-    let mut cursor = Cursor::new(&bytes);
-    let mut reader = BitReader::endian(&mut cursor, BigEndian);
-    let mut v = vec![];
-    for _i in 0..num_chars {
-        // must be a better way to loop through the length of reader.
-        let c = get_base64_rep(reader.read::<u8>(6).unwrap()).unwrap();
-        v.push(c);
-    }
-
-    v
-}
-
-// this converts u8 to base64. If topmost bits aren't 00, returns None
-pub fn get_base64_rep(byte: u8) -> Option<char> {
-    if byte > 63 {
-        return None;
-    }
-    // capitals
-    if byte <= 25 {
-        Some((0x41 + byte) as char)
-    }
-    // lowercase
-    else if byte <= 51 {
-        Some((0x61 - 26 + byte) as char)
-    }
-    //digits
-    else if byte <= 61 {
-        Some((0x30 + byte - 52) as char)
-    } else if byte == 62 {
-        Some('+')
-    } else {
-        Some('/')
-    }
-}
-
 pub fn hex_decode_string(string: &str) -> Vec<u8> {
     hex_decode_bytes(string.as_bytes())
 }
@@ -90,93 +43,6 @@ pub fn hex_decode_string(string: &str) -> Vec<u8> {
 pub fn hex_decode_bytes(bytes: &[u8]) -> Vec<u8> {
     let n = BigUint::parse_bytes(bytes, 16).unwrap();
     n.to_bytes_be()
-}
-
-// decodes a char into its base64 representation. If it doesn't have one, returns None
-fn decode_char_to_base64(byte: u8) -> Option<u8> {
-    // capitals
-    if byte >= 65 && byte <= 90 {
-        Some(byte - 65)
-    }
-    // lowercase
-    else if byte >= 97 && byte <= 122 {
-        Some(byte - 71)
-    }
-    // digits
-    else if byte >= 48 && byte <= 57 {
-        Some(byte + 4)
-    }
-    // +
-    else if byte as char == '+' {
-        Some(62)
-    }
-    // /
-    else if byte as char == '/' {
-        Some(63)
-    }
-    // padding returns none
-    else {
-        println!("Gonna panic on char {}: {}", byte as char, byte);
-        None
-    }
-}
-
-pub fn base64_decode(data: &[u8]) -> Result<Vec<u8>, Error> {
-    let mut writer = BitWriter::endian(Vec::new(), BigEndian);
-
-    for &byte in data {
-        if byte as char == '=' {
-            break;
-        } else {
-            writer.write(6, decode_char_to_base64(byte).unwrap())?;
-        }
-    }
-
-    Ok(writer.into_writer())
-}
-
-#[allow(dead_code)]
-fn biguint_to_base64(bytes: &BigUint) -> Vec<char> {
-    // determine padding length
-    let num_bits = bytes.bits();
-    let padding: bool = num_bits % 6 != 0;
-    let num_chars: usize = num_bits / 6;
-
-    println!(
-        "num_bits {}, padding {}, num_chars {}",
-        num_bits, padding, num_chars
-    );
-
-    let bitmask: u8 = 0b0011_1111;
-
-    let mut base64_chars: Vec<char> = Vec::new();
-
-    let mut i = num_chars as i32;
-    while i >= 0 {
-        let shifted: BigUint = bytes >> (i as usize * 6);
-
-        // println!("i = {}\nbytes: {:b}\nshifted: {:b}", i, bytes, shifted);
-
-        // soooooo inefficient. gotta be a better way
-        let c: u8 = shifted.to_bytes_le()[0];
-        // println!("c: {:b}", c);
-
-        base64_chars.push(get_base64_rep(c & bitmask).unwrap());
-        // use num_traits::cast::ToPrimitive;
-        // let c = shifted as u8;
-        // print!("bytes: {:b}\nshifted: {:b}\n", bytes, shifted);
-        // match c {
-        //     Some(x) => base64_chars.push(common::get_base64_rep(bitmask & x)),
-        //     None => println!("shifting didn't work :( {}", i)
-        // }
-        i -= i;
-    }
-    if padding {
-        // TODO: need to implement adding the padding char '='
-        println!("Warning: base64 padding not implemented\n");
-    }
-
-    base64_chars
 }
 
 pub fn xor_bytes(left: &[u8], right: &[u8]) -> Vec<u8> {
@@ -268,10 +134,10 @@ pub fn get_common_letter_frequencies(msg: &[u8]) -> i32 {
     freq_count
 }
 
-pub fn find_single_char_key(cryptogram: &[u8]) -> u8 {
+pub fn find_single_char_key(cipher: &[u8]) -> u8 {
     let mut possible_keys: Vec<(i32, u8)> = Vec::new();
     for possible_key in 0..=0xffu32 {
-        let decoded_msg = single_byte_xor(&cryptogram, possible_key as u8);
+        let decoded_msg = single_byte_xor(&cipher, possible_key as u8);
         let freq_count = get_common_letter_frequencies(&decoded_msg);
         possible_keys.push((freq_count, possible_key as u8));
     }
@@ -293,21 +159,6 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     }
 
     cipher
-}
-
-pub fn read_base64_file_into_buffer(filepath: &str) -> Result<Vec<u8>, Error> {
-    use std::fs::File;
-    use std::io::{prelude::*, BufReader};
-
-    let file = File::open(filepath)?;
-    let reader = BufReader::new(file);
-
-    let mut data: Vec<u8> = Vec::new();
-    for line in reader.lines() {
-        data.extend_from_slice(&base64_decode(line?.as_bytes())?);
-    }
-
-    Ok(data)
 }
 
 pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize, Error> {
@@ -365,17 +216,22 @@ pub fn find_key_size(
     Ok(distances[0].1)
 }
 
+fn get_slice(data: &[u8], start: usize, step: usize) ->  Vec<u8> {
+    let mut slice = vec![];
+    let mut idx = start;
+    while idx < data.len() {
+        slice.push(data[idx]);
+        idx += step;
+    }
+
+    slice
+}
+
 pub fn slice_by_byte(data: &[u8], key_size: usize) -> Vec<Vec<u8>> {
     let mut sliced_data = Vec::new();
 
     for key_idx in 0..key_size {
-        let mut slice: Vec<u8> = vec![];
-        let mut idx = key_idx;
-        while idx < data.len() {
-            slice.push(data[idx]);
-            idx += key_size;
-        }
-        sliced_data.push(slice);
+        sliced_data.push(get_slice(data, key_idx, key_size));
     }
 
     sliced_data
@@ -386,13 +242,7 @@ pub fn slice_by_byte_with_idx(data: &[u8], key_size: usize) -> BTreeMap<usize, V
     let mut sliced_data = BTreeMap::new();
 
     for key_idx in 0..key_size {
-        let mut slice: Vec<u8> = vec![];
-        let mut idx = key_idx;
-        while idx < data.len() {
-            slice.push(data[idx]);
-            idx += key_size;
-        }
-        sliced_data.insert(key_idx, slice);
+        sliced_data.insert(key_idx, get_slice(data, key_idx, key_size));
     }
 
     sliced_data
