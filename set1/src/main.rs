@@ -134,8 +134,14 @@ fn main() -> Result<(), Error> {
         s.push(i);
     }
 
-    aes::mix_rows(&mut r);
-    aes::inverse_mix_rows(&mut r);
+    aes::mix_and_sub_rows(&mut r);
+    aes::inverse_mix_and_sub_rows(&mut r);
+
+    println!("{}", r == s);
+
+    // dont know if this is doing a great test
+    aes::apply_key(&mut r, &s);
+    aes::apply_key(&mut r, &s);
 
     println!("{}", r == s);
 
