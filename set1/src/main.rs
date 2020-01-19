@@ -119,13 +119,43 @@ fn challenge7() -> Result<(), Error> {
 }
 
 fn main() -> Result<(), Error> {
-    challenge1();
-    challenge2();
-    challenge3();
-    challenge4();
-    challenge5();
-    challenge6()?;
-    challenge7()?;
+    // challenge1();
+    // challenge2();
+    // challenge3();
+    // challenge4();
+    // challenge5();
+    // challenge6()?;
+    // challenge7()?;
+
+    let mut r: Vec<u8> = Vec::new();
+    let mut s: Vec<u8> = Vec::new();
+    for i in 0..16 {
+        r.push(i);
+        s.push(i);
+    }
+
+    aes::mix_rows(&mut r);
+    aes::inverse_mix_rows(&mut r);
+
+    println!("{}", r == s);
+
+    let mut x: Vec<u8> = vec![
+        0xdb, 0x13, 0x53, 0x45, 0xf2, 0x0a, 0x22, 0x5c, 0x01, 0x01, 0x01, 0x01, 0xc6, 0xc6, 0xc6,
+        0xc6,
+    ];
+    println!("{}", x.len());
+    let z = x.clone();
+    let y: Vec<u8> = vec![
+        0x8e, 0x4d, 0xa1, 0xbc, 0x9f, 0xdc, 0x58, 0x9d, 0x01, 0x01, 0x01, 0x01, 0xc6, 0xc6, 0xc6,
+        0xc6,
+    ];
+
+    aes::mix_columns(&mut x);
+
+    println!("{}", x == y);
+
+    aes::inverse_mix_columns(&mut x);
+    println!("{}", x == z);
 
     Ok(())
 }
