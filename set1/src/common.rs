@@ -295,7 +295,7 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     cipher
 }
 
-pub fn read_file_into_buffer(filepath: &str) -> Result<Vec<u8>, Error> {
+pub fn read_base64_file_into_buffer(filepath: &str) -> Result<Vec<u8>, Error> {
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
 

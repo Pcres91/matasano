@@ -82,9 +82,9 @@ fn challenge5() {
 }
 
 fn challenge6() {
-    use common::{find_key_size, find_single_char_key, read_file_into_buffer, slice_by_byte};
+    use common::{find_key_size, find_single_char_key, read_base64_file_into_buffer, slice_by_byte};
 
-    let cipher = read_file_into_buffer("6.txt").unwrap();
+    let cipher = read_base64_file_into_buffer("6.txt").unwrap();
 
     let key_size = find_key_size(&cipher, (2, 40), 20).unwrap();
 
@@ -101,12 +101,20 @@ fn challenge6() {
 
 use std::io::Error;
 fn main() -> Result<(), Error> {
-    challenge1();
-    challenge2();
-    challenge3();
-    challenge4();
-    challenge5();
-    challenge6();
+    // challenge1();
+    // challenge2();
+    // challenge3();
+    // challenge4();
+    // challenge5();
+    // challenge6();
+
+    let cipher = common::read_base64_file_into_buffer("7.txt").unwrap();
+
+    use std::fs::File;
+    use std::io::prelude::*;
+    let mut f = File::create("7_dec.txt")?;
+    f.write_all(&cipher)?;
+    f.sync_all()?;
 
     Ok(())
 }
