@@ -61,10 +61,6 @@ pub fn apply_key(data: &mut [u8], key: &[u8]) {
     }
 }
 
-fn substitute_bytes(data: &mut [u8]) {}
-
-fn inverse_substitute_bytes(data: &mut [u8]) {}
-
 pub fn mix_and_sub_rows(data: &mut [u8]) {
     // row 0 doesn't change
     // row 1 rotated left once
