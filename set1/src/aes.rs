@@ -19,15 +19,15 @@ pub fn encrypt(plain_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
     Ok(blocks)
 }
 
-pub fn decrypt(cipher: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
-    if cipher.len() % 16 != 0 {
+pub fn decrypt(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
+    if cipher_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
             "Data must be in blocks of 128",
         ));
     }
 
-    let mut blocks: Vec<u8> = cipher.to_vec();
+    let mut blocks: Vec<u8> = cipher_text.to_vec();
 
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
@@ -70,20 +70,20 @@ pub fn mix_and_sub_rows(data: &mut [u8]) {
     // to deal with the memory casting
     let tmp = data.to_vec();
 
-    data[4] = SUB_TABLE[tmp[5] as usize];
-    data[5] = SUB_TABLE[tmp[6] as usize];
-    data[6] = SUB_TABLE[tmp[7] as usize];
-    data[7] = SUB_TABLE[tmp[4] as usize];
+    data[1] = SUB_TABLE[tmp[5] as usize];
+    data[5] = SUB_TABLE[tmp[9] as usize];
+    data[9] = SUB_TABLE[tmp[13] as usize];
+    data[13] = SUB_TABLE[tmp[1] as usize];
 
-    data[8] = SUB_TABLE[tmp[10] as usize];
-    data[9] = SUB_TABLE[tmp[11] as usize];
-    data[10] = SUB_TABLE[tmp[8] as usize];
-    data[11] = SUB_TABLE[tmp[9] as usize];
+    data[2] = SUB_TABLE[tmp[10] as usize];
+    data[6] = SUB_TABLE[tmp[14] as usize];
+    data[10] = SUB_TABLE[tmp[2] as usize];
+    data[14] = SUB_TABLE[tmp[6] as usize];
 
-    data[12] = SUB_TABLE[tmp[15] as usize];
-    data[13] = SUB_TABLE[tmp[12] as usize];
-    data[14] = SUB_TABLE[tmp[13] as usize];
-    data[15] = SUB_TABLE[tmp[14] as usize];
+    data[3] = SUB_TABLE[tmp[15] as usize];
+    data[7] = SUB_TABLE[tmp[3] as usize];
+    data[11] = SUB_TABLE[tmp[7] as usize];
+    data[15] = SUB_TABLE[tmp[11] as usize];
 }
 
 pub fn inverse_mix_and_sub_rows(data: &mut [u8]) {
@@ -93,26 +93,26 @@ pub fn inverse_mix_and_sub_rows(data: &mut [u8]) {
     // row 3 rotated right 3 times
     let tmp = data.to_vec();
 
-    data[4] = INV_SUB_TABLE[tmp[7] as usize];
-    data[5] = INV_SUB_TABLE[tmp[4] as usize];
-    data[6] = INV_SUB_TABLE[tmp[5] as usize];
-    data[7] = INV_SUB_TABLE[tmp[6] as usize];
+    data[1] = INV_SUB_TABLE[tmp[13] as usize];
+    data[5] = INV_SUB_TABLE[tmp[1] as usize];
+    data[9] = INV_SUB_TABLE[tmp[5] as usize];
+    data[13] = INV_SUB_TABLE[tmp[9] as usize];
 
-    data[8] = INV_SUB_TABLE[tmp[10] as usize];
-    data[9] = INV_SUB_TABLE[tmp[11] as usize];
-    data[10] = INV_SUB_TABLE[tmp[8] as usize];
-    data[11] = INV_SUB_TABLE[tmp[9] as usize];
+    data[2] = INV_SUB_TABLE[tmp[10] as usize];
+    data[6] = INV_SUB_TABLE[tmp[14] as usize];
+    data[10] = INV_SUB_TABLE[tmp[2] as usize];
+    data[14] = INV_SUB_TABLE[tmp[6] as usize];
 
-    data[12] = INV_SUB_TABLE[tmp[13] as usize];
-    data[13] = INV_SUB_TABLE[tmp[14] as usize];
-    data[14] = INV_SUB_TABLE[tmp[15] as usize];
-    data[15] = INV_SUB_TABLE[tmp[12] as usize];
+    data[3] = INV_SUB_TABLE[tmp[7] as usize];
+    data[7] = INV_SUB_TABLE[tmp[11] as usize];
+    data[11] = INV_SUB_TABLE[tmp[15] as usize];
+    data[15] = INV_SUB_TABLE[tmp[3] as usize];
 }
 
 pub fn mix_columns(data: &mut [u8]) {
     let tmp = data.to_vec();
 
-    for i in 0..4 {
+    for i in 0..(data.len() / 4) {
         data[(4 * i) + 0] = MUL_2[tmp[(4 * i) + 0] as usize]
             ^ MUL_3[tmp[(4 * i) + 1] as usize]
             ^ tmp[(4 * i) + 2]
@@ -135,7 +135,7 @@ pub fn mix_columns(data: &mut [u8]) {
 pub fn inverse_mix_columns(data: &mut [u8]) {
     let tmp = data.to_vec();
 
-    for i in 0..4 {
+    for i in 0..(data.len() / 4) {
         data[(4 * i) + 0] = MUL_14[tmp[(4 * i) + 0] as usize]
             ^ MUL_11[tmp[(4 * i) + 1] as usize]
             ^ MUL_13[tmp[(4 * i) + 2] as usize]
