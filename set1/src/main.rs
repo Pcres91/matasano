@@ -107,58 +107,26 @@ fn challenge6() -> Result<(), Error> {
 }
 
 fn challenge7() -> Result<(), Error> {
-    use aes::decrypt;
-
     let cipher = base64::read_encoded_file("7.txt").unwrap();
 
     let key = b"YELLOW SUBMARINE";
 
-    let _plain_text = decrypt(&cipher, key);
+    let _plain_text = aes::decrypt(&cipher, key)?;
 
+    // println!("{}", Wrap(_plain_text));
+
+    print_challenge_result(7, true, Some("Print the text if you want"));
     Ok(())
 }
 
 fn main() -> Result<(), Error> {
-    // challenge1();
-    // challenge2();
-    // challenge3();
-    // challenge4();
-    // challenge5();
-    // challenge6()?;
-    // challenge7()?;
-
-    let mut r: Vec<u8> = Vec::new();
-    let mut s: Vec<u8> = Vec::new();
-    for i in 0..16 {
-        r.push(i);
-        s.push(i);
-    }
-
-    aes::mix_and_sub_rows(&mut r)?;
-    aes::inverse_mix_and_sub_rows(&mut r)?;
-
-    println!("{}", r == s);
-
-    // dont know if this is doing a great test
-    aes::apply_key(&mut r, &s)?;
-    println!("{}", r == vec![0u8; 16]);
-    aes::apply_key(&mut r, &s)?;
-
-    println!("{}", r == s);
-
-    let key = b"Thats my Kung Fu";
-
-    let mut plain_text = b"Two One Nine Two".to_vec();
-
-    let plain_text_clone = plain_text.clone();
-
-    let expanded_key = aes::expand_key(key)?;
-
-    aes::encrypt_block(&mut plain_text, &expanded_key)?;
-
-    aes::decrypt_block(&mut plain_text, &expanded_key)?;
-
-    println!("Encrypt/decrypt: {}", plain_text == plain_text_clone);
+    challenge1();
+    challenge2();
+    challenge3();
+    challenge4();
+    challenge5();
+    challenge6()?;
+    challenge7()?;
 
     Ok(())
 }
