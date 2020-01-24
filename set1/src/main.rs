@@ -147,44 +147,18 @@ fn main() -> Result<(), Error> {
     println!("{}", r == s);
 
     let key = b"Thats my Kung Fu";
-    println!("{:2x?}", key);
 
-    let mut x = b"Two One Nine Two".to_vec();
+    let mut plain_text = b"Two One Nine Two".to_vec();
 
-    // let mut x: Vec<u8> = vec![
-    //     0xdb, 0x13, 0x53, 0x45, 0xf2, 0x0a, 0x22, 0x5c, 0x01, 0x01, 0x01, 0x01, 0xc6, 0xc6, 0xc6,
-    //     0xc6,
-    // ];
-    let z = x.clone();
-    let y: Vec<u8> = vec![
-        0x8e, 0x4d, 0xa1, 0xbc, 0x9f, 0xdc, 0x58, 0x9d, 0x01, 0x01, 0x01, 0x01, 0xc6, 0xc6, 0xc6,
-        0xc6,
-    ];
+    let plain_text_clone = plain_text.clone();
 
     let expanded_key = aes::expand_key(key)?;
 
-    for round in 0..expanded_key.len() / 16 {
-        println!(
-            "{}: {:2x?}",
-            round,
-            &expanded_key[round * 16..round * 16 + 16]
-        );
-    }
+    aes::encrypt_block(&mut plain_text, &expanded_key)?;
 
-    aes::encrypt_block(&mut x, &expanded_key)?;
+    aes::decrypt_block(&mut plain_text, &expanded_key)?;
 
-    aes::decrypt_block(&mut x, &expanded_key)?;
-
-    println!("Encrypt/decrypt: {}", x == z);
-
-    println!("{:2x?}", x);
-
-    // aes::mix_columns(&mut x)?;
-
-    // println!("{}", x == y);
-
-    // aes::inverse_mix_columns(&mut x)?;
-    // println!("{}", x == z);
+    println!("Encrypt/decrypt: {}", plain_text == plain_text_clone);
 
     Ok(())
 }

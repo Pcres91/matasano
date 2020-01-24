@@ -4,7 +4,7 @@ pub fn encrypt(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if plain_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            "Data must be in blocks of 128",
+            "encrypt(): Data must be in blocks of 16 bytes",
         ));
     }
     if key.len() != 16 {
@@ -30,7 +30,7 @@ pub fn decrypt(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
     if cipher_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            "Data must be in blocks of 128",
+            "decrypt(): Data must be in blocks of 128",
         ));
     }
     if key.len() != 16 {
@@ -68,12 +68,12 @@ pub fn encrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error>
     for round in 1..10 {
         mix_and_sub_rows(block)?;
         mix_columns(block)?;
-
         apply_key(block, &expanded_key[round * 16..round * 16 + 16])?;
     }
 
-    //last round
-    apply_key(block, &expanded_key[160..176])?;
+    //last round, no mix columns
+    mix_and_sub_rows(block)?;
+    apply_key(block, &expanded_key[10 * 16..10 * 16 + 16])?;
 
     Ok(())
 }
@@ -82,7 +82,10 @@ pub fn decrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error>
     if expanded_key.len() != 176 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            "decrypt_block(): Expanded key must be 176 bytes in length",
+            format!(
+                "decrypt_block(): Expanded key must be 176 bytes. Got length {}",
+                expanded_key.len()
+            ),
         ));
     }
 
@@ -112,12 +115,11 @@ pub fn expand_key(key: &[u8]) -> Result<Vec<u8>, Error> {
         ));
     }
 
+    // get 11-rounds-worth of keys
     let mut expanded_key = vec![0u8; 176];
 
     // first round key is the key
-    for i in 0..16 {
-        expanded_key[i] = key[i];
-    }
+    expanded_key[..16].clone_from_slice(&key[..16]);
 
     // for rounds 1 -> 10
     for round_num in 1..11 {
@@ -130,22 +132,12 @@ pub fn expand_key(key: &[u8]) -> Result<Vec<u8>, Error> {
                 expanded_key[(round_num - 1) * 16 + idx] ^ g_word[idx];
         }
 
-        // println!("{:2x?}", &expanded_key[round_num * 16..round_num * 16 + 4]);
-
         // set second, third and fourth word: XOR previous word with word of previous key
         for idx in 4..4 * 4 {
             expanded_key[round_num * 16 + idx] =
                 expanded_key[round_num * 16 - 4 + idx] ^ expanded_key[(round_num - 1) * 16 + idx];
         }
-
-        // println!(
-        //     "{}: {:2x?}",
-        //     round_num,
-        //     &expanded_key[round_num * 16..round_num * 16 + 16]
-        // );
     }
-
-    // println!("w[4]: {:2x?}", &expanded_key[4 * 4..4 * 4 + 4]);
 
     Ok(expanded_key)
 }
@@ -163,13 +155,8 @@ fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>, Error> {
         SUB_TABLE[word_in[0] as usize],
     ];
 
-    // println!("{:2x?}", tmp);
-
     // xor with round constant rcon
     let arr2 = [RCON[rcon_idx], 0, 0, 0];
-
-    // println!("{:2x?}", arr2);
-
     Ok(xor_words(&tmp, &arr2)?)
 }
 
@@ -221,10 +208,18 @@ pub fn mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
     if state.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            "state must be 16 bytes in length",
+            format!(
+                "mix_and_sub_rows(): state must be 16 bytes in length, got {}",
+                state.len()
+            ),
         ));
     }
     let tmp = state.to_vec();
+
+    state[0] = SUB_TABLE[tmp[0] as usize];
+    state[4] = SUB_TABLE[tmp[4] as usize];
+    state[8] = SUB_TABLE[tmp[8] as usize];
+    state[12] = SUB_TABLE[tmp[12] as usize];
 
     state[1] = SUB_TABLE[tmp[5] as usize];
     state[5] = SUB_TABLE[tmp[9] as usize];
@@ -256,6 +251,11 @@ pub fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
         ));
     }
     let tmp = state.to_vec();
+
+    state[0] = INV_SUB_TABLE[tmp[0] as usize];
+    state[4] = INV_SUB_TABLE[tmp[4] as usize];
+    state[8] = INV_SUB_TABLE[tmp[8] as usize];
+    state[12] = INV_SUB_TABLE[tmp[12] as usize];
 
     state[1] = INV_SUB_TABLE[tmp[13] as usize];
     state[5] = INV_SUB_TABLE[tmp[1] as usize];
@@ -493,3 +493,17 @@ const MUL_14: [u8; 256] = [
 const RCON: [u8; 11] = [
     0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
 ];
+
+fn print_state(state: &[u8]) {
+    println!();
+    for i in 0..4 {
+        println!(
+            "|{:2x} {:2x} {:2x} {:2x}|",
+            state[i],
+            state[i + 4],
+            state[i + 8],
+            state[i + 12]
+        );
+    }
+    println!();
+}
