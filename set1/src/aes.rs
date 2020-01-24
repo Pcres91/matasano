@@ -285,19 +285,19 @@ pub fn mix_columns(state: &mut [u8]) -> Result<(), Error> {
     let tmp = state.to_vec();
 
     for i in 0..(state.len() / 4) {
-        state[(4 * i) + 0] = MUL_2[tmp[(4 * i) + 0] as usize]
+        state[(4 * i)] = MUL_2[tmp[(4 * i)] as usize]
             ^ MUL_3[tmp[(4 * i) + 1] as usize]
             ^ tmp[(4 * i) + 2]
             ^ tmp[(4 * i) + 3];
-        state[(4 * i) + 1] = tmp[(4 * i) + 0]
+        state[(4 * i) + 1] = tmp[(4 * i)]
             ^ MUL_2[tmp[(4 * i) + 1] as usize]
             ^ MUL_3[tmp[(4 * i) + 2] as usize]
             ^ tmp[(4 * i) + 3];
-        state[(4 * i) + 2] = tmp[(4 * i) + 0]
+        state[(4 * i) + 2] = tmp[(4 * i)]
             ^ tmp[(4 * i) + 1]
             ^ MUL_2[tmp[(4 * i) + 2] as usize]
             ^ MUL_3[tmp[(4 * i) + 3] as usize];
-        state[(4 * i) + 3] = MUL_3[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 3] = MUL_3[tmp[(4 * i)] as usize]
             ^ tmp[(4 * i) + 1]
             ^ tmp[(4 * i) + 2]
             ^ MUL_2[tmp[(4 * i) + 3] as usize];
@@ -316,19 +316,19 @@ pub fn inverse_mix_columns(state: &mut [u8]) -> Result<(), Error> {
     let tmp = state.to_vec();
 
     for i in 0..(state.len() / 4) {
-        state[(4 * i) + 0] = MUL_14[tmp[(4 * i) + 0] as usize]
+        state[(4 * i)] = MUL_14[tmp[(4 * i)] as usize]
             ^ MUL_11[tmp[(4 * i) + 1] as usize]
             ^ MUL_13[tmp[(4 * i) + 2] as usize]
             ^ MUL_9[tmp[(4 * i) + 3] as usize];
-        state[(4 * i) + 1] = MUL_9[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 1] = MUL_9[tmp[(4 * i)] as usize]
             ^ MUL_14[tmp[(4 * i) + 1] as usize]
             ^ MUL_11[tmp[(4 * i) + 2] as usize]
             ^ MUL_13[tmp[(4 * i) + 3] as usize];
-        state[(4 * i) + 2] = MUL_13[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 2] = MUL_13[tmp[(4 * i)] as usize]
             ^ MUL_9[tmp[(4 * i) + 1] as usize]
             ^ MUL_14[tmp[(4 * i) + 2] as usize]
             ^ MUL_11[tmp[(4 * i) + 3] as usize];
-        state[(4 * i) + 3] = MUL_11[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 3] = MUL_11[tmp[(4 * i)] as usize]
             ^ MUL_13[tmp[(4 * i) + 1] as usize]
             ^ MUL_9[tmp[(4 * i) + 2] as usize]
             ^ MUL_14[tmp[(4 * i) + 3] as usize];
