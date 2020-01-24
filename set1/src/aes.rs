@@ -1,6 +1,6 @@
 use std::io::{Error, ErrorKind};
 
-pub fn encrypt(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn encrypt_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if plain_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -20,13 +20,13 @@ pub fn encrypt(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
 
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
-        encrypt_block(&mut blocks[idx..idx + 16], &expanded_key)?;
+        encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
     Ok(blocks)
 }
 
-pub fn decrypt(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
+pub fn decrypt_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
     if cipher_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -46,13 +46,13 @@ pub fn decrypt(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
 
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
-        decrypt_block(&mut blocks[idx..idx + 16], &expanded_key)?;
+        decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
     Ok(blocks)
 }
 
-pub fn encrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
+fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
     if expanded_key.len() != 176 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -78,7 +78,7 @@ pub fn encrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error>
     Ok(())
 }
 
-pub fn decrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
+fn decrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
     if expanded_key.len() != 176 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -107,7 +107,7 @@ pub fn decrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error>
     Ok(())
 }
 
-pub fn expand_key(key: &[u8]) -> Result<Vec<u8>, Error> {
+fn expand_key(key: &[u8]) -> Result<Vec<u8>, Error> {
     if key.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -177,7 +177,7 @@ fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(vec![l[0] ^ r[0], l[1] ^ r[1], l[2] ^ r[2], l[3] ^ r[3]])
 }
 
-pub fn apply_key(state: &mut [u8], key: &[u8]) -> Result<(), Error> {
+fn apply_key(state: &mut [u8], key: &[u8]) -> Result<(), Error> {
     if key.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -198,7 +198,7 @@ pub fn apply_key(state: &mut [u8], key: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
+fn mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
     // row 0 doesn't change
     // row 1 rotated left once
     // row 2 rotated left twice
@@ -239,7 +239,7 @@ pub fn mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
+fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
     // row 0 doesn't change
     // row 1 rotated right once
     // row 2 rotated right twice
@@ -275,7 +275,7 @@ pub fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn mix_columns(state: &mut [u8]) -> Result<(), Error> {
+fn mix_columns(state: &mut [u8]) -> Result<(), Error> {
     if state.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -306,7 +306,7 @@ pub fn mix_columns(state: &mut [u8]) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn inverse_mix_columns(state: &mut [u8]) -> Result<(), Error> {
+fn inverse_mix_columns(state: &mut [u8]) -> Result<(), Error> {
     if state.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,

@@ -111,9 +111,9 @@ fn challenge7() -> Result<(), Error> {
 
     let key = b"YELLOW SUBMARINE";
 
-    let _plain_text = aes::decrypt(&cipher, key)?;
+    let _plain_text = aes::decrypt_128(&cipher, key)?;
 
-    // println!("{}", Wrap(_plain_text));
+    println!("{}", Wrap(_plain_text));
 
     print_challenge_result(7, true, Some("Print the text if you want"));
     Ok(())
