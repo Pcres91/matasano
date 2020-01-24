@@ -216,7 +216,7 @@ pub fn find_key_size(
     Ok(distances[0].1)
 }
 
-fn get_slice(data: &[u8], start: usize, step: usize) ->  Vec<u8> {
+fn get_slice(data: &[u8], start: usize, step: usize) -> Vec<u8> {
     let mut slice = vec![];
     let mut idx = start;
     while idx < data.len() {
