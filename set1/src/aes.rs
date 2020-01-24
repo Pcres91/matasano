@@ -1,19 +1,26 @@
-use bitstream_io::{BigEndian, BitReader, BitWriter};
-use std::io::{Cursor, Error, ErrorKind};
+use std::io::{Error, ErrorKind};
 
-pub fn encrypt(plain_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
+pub fn encrypt(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if plain_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
             "Data must be in blocks of 128",
         ));
     }
+    if key.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("encrypt(): Key must be 16 bytes. Got {}", key.len()),
+        ));
+    }
 
     let mut blocks: Vec<u8> = plain_text.to_vec();
 
+    let expanded_key = expand_key(key)?;
+
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
-        run_encrypt_round(&mut blocks[idx..idx + 16], key);
+        encrypt_block(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
     Ok(blocks)
@@ -26,133 +33,308 @@ pub fn decrypt(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
             "Data must be in blocks of 128",
         ));
     }
+    if key.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("decrypt(): Key must be 16 bytes. Got {}", key.len()),
+        ));
+    }
 
     let mut blocks: Vec<u8> = cipher_text.to_vec();
 
+    let expanded_key = expand_key(key)?;
+
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
-        run_decrypt_round(&mut blocks[idx..idx + 16], key);
+        decrypt_block(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
     Ok(blocks)
 }
 
-fn run_encrypt_round(mut block: &mut [u8], key: &[u8; 16]) {
-    // apply_key(&mut block, key);
-    // substitute_bytes(&mut block);
-    // mix_rows(&mut block);
-    // mix_columns(&mut block);
-}
-
-fn run_decrypt_round(mut block: &mut [u8], key: &[u8; 16]) {
-    // inverse_mix_columns(&mut block);
-    // inverse_mix_rows(&mut block);
-    // inverse_substitute_bytes(&mut block);
-    // apply_key(&mut block, key);
-}
-
-fn key_expansion(key: &[u8]) -> Vec<u8> {
-    vec![]
-}
-
-pub fn apply_key(data: &mut [u8], key: &[u8]) {
-    for i in 0..data.len() {
-        data[i] ^= key[i];
+pub fn encrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
+    if expanded_key.len() != 176 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!(
+                "encrypt_block(): Expanded key must be 176 bytes. Got length {}",
+                expanded_key.len()
+            ),
+        ));
     }
+
+    apply_key(block, &expanded_key[0..16])?;
+
+    for round in 1..10 {
+        mix_and_sub_rows(block)?;
+        mix_columns(block)?;
+
+        apply_key(block, &expanded_key[round * 16..round * 16 + 16])?;
+    }
+
+    //last round
+    apply_key(block, &expanded_key[160..176])?;
+
+    Ok(())
 }
 
-pub fn mix_and_sub_rows(data: &mut [u8]) {
+pub fn decrypt_block(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
+    if expanded_key.len() != 176 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "decrypt_block(): Expanded key must be 176 bytes in length",
+        ));
+    }
+
+    // must be last four words of the expanded key
+    apply_key(block, &expanded_key[160..176])?;
+
+    let mut key_idx: usize = 144;
+    for _round in 1..10 {
+        inverse_mix_and_sub_rows(block)?;
+        apply_key(block, &expanded_key[key_idx..key_idx + 16])?;
+        inverse_mix_columns(block)?;
+        key_idx -= 16;
+    }
+
+    //final round
+    inverse_mix_and_sub_rows(block)?;
+    apply_key(block, &expanded_key[0..16])?;
+
+    Ok(())
+}
+
+pub fn expand_key(key: &[u8]) -> Result<Vec<u8>, Error> {
+    if key.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("expand_key(): Key must be 16 bytes. Got {}", key.len()),
+        ));
+    }
+
+    let mut expanded_key = vec![0u8; 176];
+
+    // first round key is the key
+    for i in 0..16 {
+        expanded_key[i] = key[i];
+    }
+
+    // for rounds 1 -> 10
+    for round_num in 1..11 {
+        // get g(last word from prev key)
+        let g_word = g(&expanded_key[round_num * 16 - 4..round_num * 16], round_num)?;
+
+        // set first word: XOR previous word with g(first word of previous key)
+        for idx in 0..4 {
+            expanded_key[round_num * 16 + idx] =
+                expanded_key[(round_num - 1) * 16 + idx] ^ g_word[idx];
+        }
+
+        // println!("{:2x?}", &expanded_key[round_num * 16..round_num * 16 + 4]);
+
+        // set second, third and fourth word: XOR previous word with word of previous key
+        for idx in 4..4 * 4 {
+            expanded_key[round_num * 16 + idx] =
+                expanded_key[round_num * 16 - 4 + idx] ^ expanded_key[(round_num - 1) * 16 + idx];
+        }
+
+        // println!(
+        //     "{}: {:2x?}",
+        //     round_num,
+        //     &expanded_key[round_num * 16..round_num * 16 + 16]
+        // );
+    }
+
+    // println!("w[4]: {:2x?}", &expanded_key[4 * 4..4 * 4 + 4]);
+
+    Ok(expanded_key)
+}
+
+fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>, Error> {
+    if word_in.len() != 4 {
+        return Err(Error::new(ErrorKind::InvalidData, "Word must be 4 bytes"));
+    }
+
+    // rotate bytes left once and substitute from S-box
+    let tmp = [
+        SUB_TABLE[word_in[1] as usize],
+        SUB_TABLE[word_in[2] as usize],
+        SUB_TABLE[word_in[3] as usize],
+        SUB_TABLE[word_in[0] as usize],
+    ];
+
+    // println!("{:2x?}", tmp);
+
+    // xor with round constant rcon
+    let arr2 = [RCON[rcon_idx], 0, 0, 0];
+
+    // println!("{:2x?}", arr2);
+
+    Ok(xor_words(&tmp, &arr2)?)
+}
+
+fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>, Error> {
+    if l.len() != 4 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("xor_words(): l must be 4 bytes, got {}", l.len()),
+        ));
+    }
+    if r.len() != 4 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("xor_words(): r must be 4 bytes, got {}", r.len()),
+        ));
+    }
+
+    Ok(vec![l[0] ^ r[0], l[1] ^ r[1], l[2] ^ r[2], l[3] ^ r[3]])
+}
+
+pub fn apply_key(state: &mut [u8], key: &[u8]) -> Result<(), Error> {
+    if key.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("apply_key(): Key must be 16 bytes. Got {}", key.len()),
+        ));
+    }
+    if state.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("apply_key(): State must be 16 bytes. Got {}", state.len()),
+        ));
+    }
+
+    for i in 0..state.len() {
+        state[i] ^= key[i];
+    }
+
+    Ok(())
+}
+
+pub fn mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
     // row 0 doesn't change
     // row 1 rotated left once
     // row 2 rotated left twice
     // row 3 rotated left 3 times
     // could be done with shifting u32s but didn't want
     // to deal with the memory casting
-    let tmp = data.to_vec();
+    if state.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "state must be 16 bytes in length",
+        ));
+    }
+    let tmp = state.to_vec();
 
-    data[1] = SUB_TABLE[tmp[5] as usize];
-    data[5] = SUB_TABLE[tmp[9] as usize];
-    data[9] = SUB_TABLE[tmp[13] as usize];
-    data[13] = SUB_TABLE[tmp[1] as usize];
+    state[1] = SUB_TABLE[tmp[5] as usize];
+    state[5] = SUB_TABLE[tmp[9] as usize];
+    state[9] = SUB_TABLE[tmp[13] as usize];
+    state[13] = SUB_TABLE[tmp[1] as usize];
 
-    data[2] = SUB_TABLE[tmp[10] as usize];
-    data[6] = SUB_TABLE[tmp[14] as usize];
-    data[10] = SUB_TABLE[tmp[2] as usize];
-    data[14] = SUB_TABLE[tmp[6] as usize];
+    state[2] = SUB_TABLE[tmp[10] as usize];
+    state[6] = SUB_TABLE[tmp[14] as usize];
+    state[10] = SUB_TABLE[tmp[2] as usize];
+    state[14] = SUB_TABLE[tmp[6] as usize];
 
-    data[3] = SUB_TABLE[tmp[15] as usize];
-    data[7] = SUB_TABLE[tmp[3] as usize];
-    data[11] = SUB_TABLE[tmp[7] as usize];
-    data[15] = SUB_TABLE[tmp[11] as usize];
+    state[3] = SUB_TABLE[tmp[15] as usize];
+    state[7] = SUB_TABLE[tmp[3] as usize];
+    state[11] = SUB_TABLE[tmp[7] as usize];
+    state[15] = SUB_TABLE[tmp[11] as usize];
+
+    Ok(())
 }
 
-pub fn inverse_mix_and_sub_rows(data: &mut [u8]) {
+pub fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<(), Error> {
     // row 0 doesn't change
     // row 1 rotated right once
     // row 2 rotated right twice
     // row 3 rotated right 3 times
-    let tmp = data.to_vec();
+    if state.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "state must be 16 bytes in length",
+        ));
+    }
+    let tmp = state.to_vec();
 
-    data[1] = INV_SUB_TABLE[tmp[13] as usize];
-    data[5] = INV_SUB_TABLE[tmp[1] as usize];
-    data[9] = INV_SUB_TABLE[tmp[5] as usize];
-    data[13] = INV_SUB_TABLE[tmp[9] as usize];
+    state[1] = INV_SUB_TABLE[tmp[13] as usize];
+    state[5] = INV_SUB_TABLE[tmp[1] as usize];
+    state[9] = INV_SUB_TABLE[tmp[5] as usize];
+    state[13] = INV_SUB_TABLE[tmp[9] as usize];
 
-    data[2] = INV_SUB_TABLE[tmp[10] as usize];
-    data[6] = INV_SUB_TABLE[tmp[14] as usize];
-    data[10] = INV_SUB_TABLE[tmp[2] as usize];
-    data[14] = INV_SUB_TABLE[tmp[6] as usize];
+    state[2] = INV_SUB_TABLE[tmp[10] as usize];
+    state[6] = INV_SUB_TABLE[tmp[14] as usize];
+    state[10] = INV_SUB_TABLE[tmp[2] as usize];
+    state[14] = INV_SUB_TABLE[tmp[6] as usize];
 
-    data[3] = INV_SUB_TABLE[tmp[7] as usize];
-    data[7] = INV_SUB_TABLE[tmp[11] as usize];
-    data[11] = INV_SUB_TABLE[tmp[15] as usize];
-    data[15] = INV_SUB_TABLE[tmp[3] as usize];
+    state[3] = INV_SUB_TABLE[tmp[7] as usize];
+    state[7] = INV_SUB_TABLE[tmp[11] as usize];
+    state[11] = INV_SUB_TABLE[tmp[15] as usize];
+    state[15] = INV_SUB_TABLE[tmp[3] as usize];
+
+    Ok(())
 }
 
-pub fn mix_columns(data: &mut [u8]) {
-    let tmp = data.to_vec();
+pub fn mix_columns(state: &mut [u8]) -> Result<(), Error> {
+    if state.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "state must be 16 bytes in length",
+        ));
+    }
+    let tmp = state.to_vec();
 
-    for i in 0..(data.len() / 4) {
-        data[(4 * i) + 0] = MUL_2[tmp[(4 * i) + 0] as usize]
+    for i in 0..(state.len() / 4) {
+        state[(4 * i) + 0] = MUL_2[tmp[(4 * i) + 0] as usize]
             ^ MUL_3[tmp[(4 * i) + 1] as usize]
             ^ tmp[(4 * i) + 2]
             ^ tmp[(4 * i) + 3];
-        data[(4 * i) + 1] = tmp[(4 * i) + 0]
+        state[(4 * i) + 1] = tmp[(4 * i) + 0]
             ^ MUL_2[tmp[(4 * i) + 1] as usize]
             ^ MUL_3[tmp[(4 * i) + 2] as usize]
             ^ tmp[(4 * i) + 3];
-        data[(4 * i) + 2] = tmp[(4 * i) + 0]
+        state[(4 * i) + 2] = tmp[(4 * i) + 0]
             ^ tmp[(4 * i) + 1]
             ^ MUL_2[tmp[(4 * i) + 2] as usize]
             ^ MUL_3[tmp[(4 * i) + 3] as usize];
-        data[(4 * i) + 3] = MUL_3[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 3] = MUL_3[tmp[(4 * i) + 0] as usize]
             ^ tmp[(4 * i) + 1]
             ^ tmp[(4 * i) + 2]
             ^ MUL_2[tmp[(4 * i) + 3] as usize];
     }
+
+    Ok(())
 }
 
-pub fn inverse_mix_columns(data: &mut [u8]) {
-    let tmp = data.to_vec();
+pub fn inverse_mix_columns(state: &mut [u8]) -> Result<(), Error> {
+    if state.len() != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "state must be 16 bytes in length",
+        ));
+    }
+    let tmp = state.to_vec();
 
-    for i in 0..(data.len() / 4) {
-        data[(4 * i) + 0] = MUL_14[tmp[(4 * i) + 0] as usize]
+    for i in 0..(state.len() / 4) {
+        state[(4 * i) + 0] = MUL_14[tmp[(4 * i) + 0] as usize]
             ^ MUL_11[tmp[(4 * i) + 1] as usize]
             ^ MUL_13[tmp[(4 * i) + 2] as usize]
             ^ MUL_9[tmp[(4 * i) + 3] as usize];
-        data[(4 * i) + 1] = MUL_9[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 1] = MUL_9[tmp[(4 * i) + 0] as usize]
             ^ MUL_14[tmp[(4 * i) + 1] as usize]
             ^ MUL_11[tmp[(4 * i) + 2] as usize]
             ^ MUL_13[tmp[(4 * i) + 3] as usize];
-        data[(4 * i) + 2] = MUL_13[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 2] = MUL_13[tmp[(4 * i) + 0] as usize]
             ^ MUL_9[tmp[(4 * i) + 1] as usize]
             ^ MUL_14[tmp[(4 * i) + 2] as usize]
             ^ MUL_11[tmp[(4 * i) + 3] as usize];
-        data[(4 * i) + 3] = MUL_11[tmp[(4 * i) + 0] as usize]
+        state[(4 * i) + 3] = MUL_11[tmp[(4 * i) + 0] as usize]
             ^ MUL_13[tmp[(4 * i) + 1] as usize]
             ^ MUL_9[tmp[(4 * i) + 2] as usize]
             ^ MUL_14[tmp[(4 * i) + 3] as usize];
     }
+
+    Ok(())
 }
 
 const SUB_TABLE: [u8; 256] = [
@@ -305,4 +487,9 @@ const MUL_14: [u8; 256] = [
     0x0c, 0x02, 0x10, 0x1e, 0x34, 0x3a, 0x28, 0x26, 0x7c, 0x72, 0x60, 0x6e, 0x44, 0x4a, 0x58, 0x56,
     0x37, 0x39, 0x2b, 0x25, 0x0f, 0x01, 0x13, 0x1d, 0x47, 0x49, 0x5b, 0x55, 0x7f, 0x71, 0x63, 0x6d,
     0xd7, 0xd9, 0xcb, 0xc5, 0xef, 0xe1, 0xf3, 0xfd, 0xa7, 0xa9, 0xbb, 0xb5, 0x9f, 0x91, 0x83, 0x8d,
+];
+
+// 2, 4, 8, 16, 32, etc for the round number idx - 1
+const RCON: [u8; 11] = [
+    0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
 ];

@@ -134,34 +134,57 @@ fn main() -> Result<(), Error> {
         s.push(i);
     }
 
-    aes::mix_and_sub_rows(&mut r);
-    aes::inverse_mix_and_sub_rows(&mut r);
+    aes::mix_and_sub_rows(&mut r)?;
+    aes::inverse_mix_and_sub_rows(&mut r)?;
 
     println!("{}", r == s);
 
     // dont know if this is doing a great test
-    aes::apply_key(&mut r, &s);
+    aes::apply_key(&mut r, &s)?;
     println!("{}", r == vec![0u8; 16]);
-    aes::apply_key(&mut r, &s);
+    aes::apply_key(&mut r, &s)?;
 
     println!("{}", r == s);
 
-    let mut x: Vec<u8> = vec![
-        0xdb, 0x13, 0x53, 0x45, 0xf2, 0x0a, 0x22, 0x5c, 0x01, 0x01, 0x01, 0x01, 0xc6, 0xc6, 0xc6,
-        0xc6,
-    ];
+    let key = b"Thats my Kung Fu";
+    println!("{:2x?}", key);
+
+    let mut x = b"Two One Nine Two".to_vec();
+
+    // let mut x: Vec<u8> = vec![
+    //     0xdb, 0x13, 0x53, 0x45, 0xf2, 0x0a, 0x22, 0x5c, 0x01, 0x01, 0x01, 0x01, 0xc6, 0xc6, 0xc6,
+    //     0xc6,
+    // ];
     let z = x.clone();
     let y: Vec<u8> = vec![
         0x8e, 0x4d, 0xa1, 0xbc, 0x9f, 0xdc, 0x58, 0x9d, 0x01, 0x01, 0x01, 0x01, 0xc6, 0xc6, 0xc6,
         0xc6,
     ];
 
-    aes::mix_columns(&mut x);
+    let expanded_key = aes::expand_key(key)?;
 
-    println!("{}", x == y);
+    for round in 0..expanded_key.len() / 16 {
+        println!(
+            "{}: {:2x?}",
+            round,
+            &expanded_key[round * 16..round * 16 + 16]
+        );
+    }
 
-    aes::inverse_mix_columns(&mut x);
-    println!("{}", x == z);
+    aes::encrypt_block(&mut x, &expanded_key)?;
+
+    aes::decrypt_block(&mut x, &expanded_key)?;
+
+    println!("Encrypt/decrypt: {}", x == z);
+
+    println!("{:2x?}", x);
+
+    // aes::mix_columns(&mut x)?;
+
+    // println!("{}", x == y);
+
+    // aes::inverse_mix_columns(&mut x)?;
+    // println!("{}", x == z);
 
     Ok(())
 }
