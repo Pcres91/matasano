@@ -171,7 +171,7 @@ fn challenge9() -> Result<(), Error> {
     let mut msg = b"YELLO".to_vec();
     let key_len = 16;
 
-    common::pad_message_pkcs7(&mut msg, key_len)?;
+    aes::pad_message_pkcs7(&mut msg, key_len)?;
 
     println!("{:2x?}", msg);
     Ok(())
@@ -192,6 +192,33 @@ fn challenge10() -> Result<(), Error> {
     Ok(())
 }
 
+fn challenge11() -> Result<(), Error> {
+    let cipher_text = base64::read_encoded_file("10.txt")?;
+    let key = b"YELLOW SUBMARINE";
+
+    let plain_text = aes::decrypt_cbc_128(&cipher_text, key)?;
+
+    let cipher_text = aes::encryption_oracle(&plain_text)?;
+
+    let mut matches = 0;
+    let mut counter = 0;
+    let blocks: Vec<u8> = cipher_text.to_vec();
+    let num_blocks = blocks.len() / 16;
+    for i in 0..num_blocks - 1 {
+        let block = &blocks[i * 16..i * 16 + 16];
+        for j in i + 1..num_blocks {
+            counter += 1;
+            let next_block = &blocks[j * 16..j * 16 + 16];
+            if block == next_block {
+                matches += 1;
+            }
+        }
+    }
+    println!("tests: {}", counter);
+    println!("matches: {}", matches);
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
     // challenge1();
     // challenge2();
@@ -203,7 +230,8 @@ fn main() -> Result<(), Error> {
     // challenge8()?;
 
     // challenge9()?;
-    challenge10()?;
+    // challenge10()?;
+    challenge11()?;
 
     Ok(())
 }

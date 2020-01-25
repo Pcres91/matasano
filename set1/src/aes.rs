@@ -4,13 +4,16 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> 
     if plain_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            "encrypt(): Data must be in blocks of 16 bytes",
+            format!(
+                "encrypt_ecb_128(): Data must be in blocks of 16 bytes, got {}",
+                plain_text.len()
+            ),
         ));
     }
     if key.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("encrypt(): Key must be 16 bytes. Got {}", key.len()),
+            format!("encrypt_ecb_128(): Key must be 16 bytes. Got {}", key.len()),
         ));
     }
 
@@ -29,13 +32,16 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Er
     if cipher_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            "decrypt(): Data must be in blocks of 128",
+            format!(
+                "decrypt_ecb_128(): Data must be in blocks of 128, got {}",
+                cipher_text.len()
+            ),
         ));
     }
     if key.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("decrypt(): Key must be 16 bytes. Got {}", key.len()),
+            format!("decrypt_ecb_128(): Key must be 16 bytes. Got {}", key.len()),
         ));
     }
 
@@ -108,6 +114,54 @@ pub fn decrypt_cbc_128_with_iv(
         prev_block = block.to_vec();
     }
     Ok(blocks)
+}
+
+pub fn generate_key() -> Vec<u8> {
+    extern crate rand;
+    use rand::prelude::*;
+
+    let mut rng = rand::thread_rng();
+
+    let mut key = vec![0u8; 16];
+    rng.fill_bytes(&mut key);
+
+    key
+}
+
+pub fn encryption_oracle(plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+    let key = generate_key();
+
+    extern crate rand;
+    use rand::prelude::*;
+    let mut rng = rand::thread_rng();
+
+    // extend plain text with 5-10 bytes at the start and end
+    let num_prefix_bytes: usize = rng.gen_range(5, 11);
+    let mut prefix = vec![0u8; num_prefix_bytes];
+    rng.fill_bytes(&mut prefix);
+
+    let num_suffix_bytes: usize = rng.gen_range(5, 11);
+    let mut suffix = vec![0u8; num_suffix_bytes];
+    rng.fill_bytes(&mut suffix);
+
+    let mut new_plain_text: Vec<u8> = Vec::new();
+    new_plain_text.extend_from_slice(&prefix);
+    new_plain_text.extend_from_slice(plain_text);
+    new_plain_text.extend_from_slice(&suffix);
+
+    pad_message_pkcs7(&mut new_plain_text, 16)?;
+
+    // select to either encrypt ecb/cbc
+    let ecb_encrypt: bool = rng.gen();
+
+    println!("ecb encryption: {}", ecb_encrypt);
+
+    if ecb_encrypt {
+        encrypt_ecb_128(&new_plain_text, &key)
+    } else {
+        let iv: [u8; 16] = rng.gen();
+        encrypt_cbc_128_with_iv(&new_plain_text, &key, &iv)
+    }
 }
 
 fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
@@ -551,6 +605,29 @@ const MUL_14: [u8; 256] = [
 const RCON: [u8; 11] = [
     0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
 ];
+
+pub fn pad_message_pkcs7(message: &mut Vec<u8>, block_byte_length: usize) -> Result<(), Error> {
+    let final_block_len = message.len() % block_byte_length;
+
+    let num_padded_bytes = block_byte_length - final_block_len;
+    if num_padded_bytes > 0xff {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!(
+                "pad_message_pkcs7(): Cannot pad with {} bytes",
+                num_padded_bytes
+            ),
+        ));
+    }
+
+    // pad with bytes of the length of padding
+    let padding_val: u8 = num_padded_bytes as u8;
+    let padding = vec![padding_val; num_padded_bytes];
+
+    message.extend_from_slice(&padding);
+
+    Ok(())
+}
 
 fn print_state(state: &[u8]) {
     println!();
