@@ -650,6 +650,7 @@ pub fn pad_message_pkcs7(message: &mut Vec<u8>, block_byte_length: usize) -> Res
     Ok(())
 }
 
+#[allow(dead_code)]
 fn print_state(state: &[u8]) {
     println!();
     for i in 0..4 {

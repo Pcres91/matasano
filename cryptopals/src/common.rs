@@ -21,19 +21,6 @@ impl fmt::Display for Wrap {
     }
 }
 
-pub fn print_challenge_result(challenge_num: u32, success: bool, message: Option<&str>) {
-    let mut msg = String::new();
-    if let Some(m) = message {
-        msg = ": ".to_string() + m
-    }
-
-    if success {
-        println!("SUCCESSFUL: Challenge {}{}", challenge_num, msg)
-    } else {
-        println!("FAILED: Challenge {}", challenge_num)
-    }
-}
-
 pub fn hex_decode_string(string: &str) -> Vec<u8> {
     hex_decode_bytes(string.as_bytes())
 }

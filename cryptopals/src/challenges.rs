@@ -1,13 +1,23 @@
-#![allow(dead_code)]
+use crate::aes;
+use crate::base64;
+use crate::common;
+use common::Wrap;
 use std::io::Error;
 
-mod common;
-use common::{print_challenge_result, Wrap};
+fn print_challenge_result(challenge_num: u32, success: bool, message: Option<&str>) {
+    let mut msg = String::new();
+    if let Some(m) = message {
+        msg = ": ".to_string() + m
+    }
 
-mod aes;
-mod base64;
+    if success {
+        println!("SUCCESSFUL: Challenge {}{}", challenge_num, msg)
+    } else {
+        println!("FAILED: Challenge {}", challenge_num)
+    }
+}
 
-fn challenge1() {
+pub fn challenge1() {
     use common::hex_decode_bytes;
     let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let bytes = hex_decode_bytes(n); // vec![0x49, 0x27, 0x6d, 0x20, ...]
@@ -20,7 +30,7 @@ fn challenge1() {
     print_challenge_result(1, encoded == expected_result, None)
 }
 
-fn challenge2() {
+pub fn challenge2() {
     use common::{hex_decode_bytes, xor_bytes};
     let a = hex_decode_bytes(b"1c0111001f010100061a024b53535009181c");
 
@@ -33,7 +43,7 @@ fn challenge2() {
     print_challenge_result(2, result == expected_result, None);
 }
 
-fn challenge3() {
+pub fn challenge3() {
     use common::{find_single_char_key, hex_decode_bytes, single_byte_xor};
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher =
@@ -48,7 +58,7 @@ fn challenge3() {
     print_challenge_result(3, result == expected_result, None);
 }
 
-fn challenge4() -> Result<(), Error> {
+pub fn challenge4() -> Result<(), Error> {
     use common::{
         find_single_char_key, get_common_letter_frequencies, hex_decode_string, single_byte_xor,
     };
@@ -77,7 +87,7 @@ fn challenge4() -> Result<(), Error> {
     Ok(())
 }
 
-fn challenge5() {
+pub fn challenge5() {
     let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
     let key = b"ICE";
 
@@ -90,7 +100,7 @@ fn challenge5() {
     print_challenge_result(5, cipher == expected_result, None);
 }
 
-fn challenge6() -> Result<(), Error> {
+pub fn challenge6() -> Result<(), Error> {
     use common::{find_key_size, find_single_char_key, slice_by_byte};
 
     let cipher = base64::read_encoded_file("6.txt")?;
@@ -110,7 +120,7 @@ fn challenge6() -> Result<(), Error> {
     Ok(())
 }
 
-fn challenge7() -> Result<(), Error> {
+pub fn challenge7() -> Result<(), Error> {
     let cipher = base64::read_encoded_file("7.txt").unwrap();
 
     let key = b"YELLOW SUBMARINE";
@@ -123,7 +133,7 @@ fn challenge7() -> Result<(), Error> {
     Ok(())
 }
 
-fn challenge8() -> Result<(), Error> {
+pub fn challenge8() -> Result<(), Error> {
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
 
@@ -167,17 +177,18 @@ fn challenge8() -> Result<(), Error> {
     Ok(())
 }
 
-fn challenge9() -> Result<(), Error> {
+pub fn challenge9() -> Result<(), Error> {
     let mut msg = b"YELLO".to_vec();
     let key_len = 16;
 
     aes::pad_message_pkcs7(&mut msg, key_len)?;
 
     println!("{:2x?}", msg);
+    print_challenge_result(9, true, None);
     Ok(())
 }
 
-fn challenge10() -> Result<(), Error> {
+pub fn challenge10() -> Result<(), Error> {
     let cipher_text = base64::read_encoded_file("10.txt")?;
     let key = b"YELLOW SUBMARINE";
 
@@ -192,7 +203,7 @@ fn challenge10() -> Result<(), Error> {
     Ok(())
 }
 
-fn challenge11() -> Result<(), Error> {
+pub fn challenge11() -> Result<(), Error> {
     let cipher_text = base64::read_encoded_file("10.txt")?;
     let key = b"YELLOW SUBMARINE";
 
@@ -207,29 +218,11 @@ fn challenge11() -> Result<(), Error> {
     Ok(())
 }
 
-fn challenge12() -> Result<(), Error> {
+pub fn challenge12() -> Result<(), Error> {
     let cipher_text = base64::read_encoded_file("10.txt")?;
     let key = b"YELLOW SUBMARINE";
 
     let _plain_text = aes::decrypt_cbc_128(&cipher_text, key)?;
-
-    Ok(())
-}
-
-fn main() -> Result<(), Error> {
-    // challenge1();
-    // challenge2();
-    // challenge3();
-    // challenge4()?;
-    // challenge5();
-    // challenge6()?;
-    // challenge7()?;
-    // challenge8()?;
-
-    // challenge9()?;
-    // challenge10()?;
-    // challenge11()?;
-    challenge12()?;
 
     Ok(())
 }
