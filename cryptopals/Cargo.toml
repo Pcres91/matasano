@@ -1,5 +1,5 @@
 [package]
-name = "crypto_challenges"
+name = "crypto"
 version = "0.1.0"
 authors = ["paul_cresswell"]
 edition = "2018"

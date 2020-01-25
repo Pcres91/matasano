@@ -24,7 +24,7 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "crypto_challenges"
+name = "crypto"
 version = "0.1.0"
 dependencies = [
  "bitstream-io 0.8.4 (registry+https://github.com/rust-lang/crates.io-index)",

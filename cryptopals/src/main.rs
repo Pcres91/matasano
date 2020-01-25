@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::io::Error;
 
-use crypto_challenges::challenges;
+use crypto::challenges;
 
 fn main() -> Result<(), Error> {
     // challenge1();
