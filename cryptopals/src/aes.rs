@@ -1,5 +1,9 @@
 use std::io::{Error, ErrorKind};
 
+pub const KNOWN_KEY: [u8; 16] = [
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+];
+
 pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if plain_text.len() % 16 != 0 {
         return Err(Error::new(
@@ -54,6 +58,20 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Er
     }
 
     Ok(blocks)
+}
+
+pub fn detect_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
+    let num_blocks = cipher_text.len() / 16;
+
+    use std::collections::hash_set::HashSet;
+    let mut set: HashSet<Vec<u8>> = HashSet::new();
+    for i in 0..num_blocks {
+        let idx = i * 16;
+        set.insert(cipher_text[idx..idx + 16].to_vec());
+    }
+    let num_unique_blocks = set.len();
+
+    num_blocks - num_unique_blocks > 1
 }
 
 pub fn encrypt_cbc_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
@@ -116,6 +134,65 @@ pub fn decrypt_cbc_128_with_iv(
     Ok(blocks)
 }
 
+pub fn break_ecb_128_message(cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
+    let block_size = find_block_length(&cipher_text, &ecb_encryption_oracle)?;
+    if block_size != 16 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Breaking aes-ecb-128: Block size not found to be size 16.",
+        ));
+    }
+
+    let in_ecb_mode = detect_cipher_in_ecb_128_mode(&ecb_encryption_oracle(
+        &vec![b'a'; block_size * 5],
+        &cipher_text,
+    )?);
+    if !in_ecb_mode {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Could not assert that the data is aes-ecb-128 encrypted",
+        ));
+    }
+
+    let mut result: Vec<u8> = Vec::new();
+    let mut new_input_block = vec![b'A'; 16];
+    let mut decrypted_char = '\0';
+    let mut stripped_unknown_text = cipher_text.to_vec();
+    while stripped_unknown_text.len() > 0 {
+        let mut max_idx = 16;
+        if stripped_unknown_text.len() < 16 {
+            max_idx = stripped_unknown_text.len();
+        }
+        for char_idx in 0..max_idx {
+            let input_block = vec![b'A'; block_size - char_idx - 1];
+            let ecb_input_block_with_unkown =
+                ecb_encryption_oracle(&input_block, &stripped_unknown_text)?;
+            let expected_block = &ecb_input_block_with_unkown[..16];
+
+            for i in 0u8..0xff {
+                new_input_block[15] = i;
+                let new_output = ecb_encryption_oracle(&[], &new_input_block)?;
+                if &new_output[..16] == expected_block {
+                    decrypted_char = i as char;
+                    break;
+                }
+            }
+            if decrypted_char == '\0' {
+                println!("Char couldnt be found, returning result up to point",);
+                break;
+            } else {
+                new_input_block.remove(0);
+                new_input_block.push(decrypted_char as u8);
+                result.push(decrypted_char as u8);
+            }
+        }
+        stripped_unknown_text = stripped_unknown_text[max_idx..].to_vec();
+        new_input_block = vec![b'A'; 16];
+    }
+
+    Ok(result)
+}
+
 pub fn generate_key() -> Vec<u8> {
     extern crate rand;
     use rand::prelude::*;
@@ -128,7 +205,7 @@ pub fn generate_key() -> Vec<u8> {
     key
 }
 
-pub fn encryption_oracle(plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn rnd_encryption_oracle(plain_text: &[u8]) -> Result<(Vec<u8>, bool), Error> {
     let key = generate_key();
 
     extern crate rand;
@@ -149,7 +226,7 @@ pub fn encryption_oracle(plain_text: &[u8]) -> Result<Vec<u8>, Error> {
     new_plain_text.extend_from_slice(plain_text);
     new_plain_text.extend_from_slice(&suffix);
 
-    pad_message_pkcs7(&mut new_plain_text, 16)?;
+    pkcs7_pad(&mut new_plain_text, 16)?;
 
     // select to either encrypt ecb/cbc
     let ecb_encrypt: bool = rng.gen();
@@ -157,32 +234,56 @@ pub fn encryption_oracle(plain_text: &[u8]) -> Result<Vec<u8>, Error> {
     // println!("ecb encryption: {}", ecb_encrypt);
 
     if ecb_encrypt {
-        encrypt_ecb_128(&new_plain_text, &key)
+        Ok((encrypt_ecb_128(&new_plain_text, &key)?, true))
     } else {
         let iv: [u8; 16] = rng.gen();
-        encrypt_cbc_128_with_iv(&new_plain_text, &key, &iv)
+        Ok((encrypt_cbc_128_with_iv(&new_plain_text, &key, &iv)?, false))
     }
 }
 
-pub fn is_ecb_encrypted(cipher_text: &[u8]) -> Result<bool, Error> {
-    let mut matches = 0;
-    let blocks: Vec<u8> = cipher_text.to_vec();
-    let num_blocks = blocks.len() / 16;
-    for i in 0..num_blocks - 1 {
-        let block = &blocks[i * 16..i * 16 + 16];
-        for j in i + 1..num_blocks {
-            let next_block = &blocks[j * 16..j * 16 + 16];
-            if block == next_block {
-                matches += 1;
+pub fn decryption_oracle(
+    encryptor: &dyn Fn(&[u8]) -> Result<(Vec<u8>, bool), Error>,
+) -> Result<bool, Error> {
+    let plain_text = [b'a'; 16 * 5];
+    let (cipher_text, in_ecb_mode) = encryptor(&plain_text)?;
+    let detected_ecb = detect_cipher_in_ecb_128_mode(&cipher_text);
+
+    Ok(detected_ecb == in_ecb_mode)
+}
+
+pub fn ecb_encryption_oracle(known_text: &[u8], cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut concatted = known_text.to_vec();
+    concatted.extend_from_slice(cipher_text);
+    pkcs7_pad(&mut concatted, 16)?;
+
+    Ok(encrypt_ecb_128(&concatted, &KNOWN_KEY)?)
+}
+
+pub fn find_block_length(
+    cipher_text: &[u8],
+    encryptor: &dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>,
+) -> Result<usize, Error> {
+    let mut prev_length = 0;
+    for i in 0..0xff {
+        let known_text = vec![b'a'; i];
+        let new_cipher = encryptor(&known_text, cipher_text)?;
+
+        if prev_length == 0 {
+            prev_length = new_cipher.len();
+        } else {
+            let block_size = new_cipher.len() - prev_length;
+            if block_size != 0 {
+                return Ok(block_size);
             }
+
+            prev_length = new_cipher.len();
         }
     }
 
-    if matches > 0 {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    Err(Error::new(
+        ErrorKind::NotFound,
+        "Couldn't find the block length",
+    ))
 }
 
 fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
@@ -627,10 +728,13 @@ const RCON: [u8; 11] = [
     0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
 ];
 
-pub fn pad_message_pkcs7(message: &mut Vec<u8>, block_byte_length: usize) -> Result<(), Error> {
+pub fn pkcs7_pad(message: &mut Vec<u8>, block_byte_length: usize) -> Result<(), Error> {
     let final_block_len = message.len() % block_byte_length;
 
-    let num_padded_bytes = block_byte_length - final_block_len;
+    let mut num_padded_bytes = block_byte_length - final_block_len;
+    if num_padded_bytes == 0 {
+        num_padded_bytes = block_byte_length;
+    }
     if num_padded_bytes > 0xff {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -642,8 +746,7 @@ pub fn pad_message_pkcs7(message: &mut Vec<u8>, block_byte_length: usize) -> Res
     }
 
     // pad with bytes of the length of padding
-    let padding_val: u8 = num_padded_bytes as u8;
-    let padding = vec![padding_val; num_padded_bytes];
+    let padding = vec![num_padded_bytes as u8; num_padded_bytes];
 
     message.extend_from_slice(&padding);
 
@@ -663,4 +766,19 @@ fn print_state(state: &[u8]) {
         );
     }
     println!();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pkcs7_pads_entirely_new_block() {
+        let block_size = 16;
+        let mut block = vec![0u8; block_size];
+        let copy = block.clone();
+        pkcs7_pad(&mut block, block_size).unwrap();
+
+        assert_eq!(copy.len() + block_size, block.len());
+    }
 }

@@ -149,7 +149,7 @@ pub fn challenge7() -> Result<(), Error> {
 
     // println!("{}", Wrap(_plain_text));
 
-    print_challenge_result(7, true, Some("Print the text if you want"));
+    print_challenge_result(7, true, Some("Implementing aes-ecb-128"));
     Ok(())
 }
 
@@ -160,36 +160,22 @@ pub fn challenge8() -> Result<(), Error> {
     let file = File::open("8.txt").unwrap();
     let reader = BufReader::new(file);
 
-    let mut num_matches: Vec<(u32, usize)> = Vec::new();
+    let mut lines_in_ecb_mode: Vec<usize> = Vec::new();
 
     for (line_num, line) in reader.lines().enumerate() {
         let cipher_text = common::hex_decode_string(&line?);
 
-        let mut matches = 0;
+        let ecb_mode = aes::detect_cipher_in_ecb_128_mode(&cipher_text);
 
-        let blocks: Vec<u8> = cipher_text.to_vec();
-        let num_blocks = blocks.len() / 16;
-        for i in 0..num_blocks - 1 {
-            let block = &blocks[i * 16..i * 16 + 16];
-            for j in i + 1..num_blocks {
-                let next_block = &blocks[j * 16..j * 16 + 16];
-                if block == next_block {
-                    matches += 1;
-                }
-            }
-        }
-        if matches > 0 {
-            num_matches.push((matches, line_num));
+        if ecb_mode {
+            lines_in_ecb_mode.push(line_num);
         }
     }
 
     print_challenge_result(
         8,
-        num_matches.len() == 1,
-        Some(&format!(
-            "line {} had {} identical blocks",
-            num_matches[0].1, num_matches[0].0
-        )),
+        lines_in_ecb_mode.len() > 0,
+        Some("detecting aes-ecb-128"),
     );
 
     Ok(())
@@ -199,10 +185,10 @@ pub fn challenge9() -> Result<(), Error> {
     let mut msg = b"YELLO".to_vec();
     let key_len = 16;
 
-    aes::pad_message_pkcs7(&mut msg, key_len)?;
+    aes::pkcs7_pad(&mut msg, key_len)?;
 
     // println!("{:2x?}", msg);
-    print_challenge_result(9, true, None);
+    print_challenge_result(9, true, Some("Implementing pkcs#7 padding"));
     Ok(())
 }
 
@@ -216,31 +202,38 @@ pub fn challenge10() -> Result<(), Error> {
 
     let cipher_again = aes::encrypt_cbc_128(&plain_text, key)?;
 
-    print_challenge_result(10, cipher_text == cipher_again, None);
+    print_challenge_result(
+        10,
+        cipher_text == cipher_again,
+        Some("Implementing aes-cbc-128"),
+    );
 
     Ok(())
 }
 
 pub fn challenge11() -> Result<(), Error> {
-    let cipher_text = base64::read_encoded_file("10.txt")?;
-    let key = b"YELLOW SUBMARINE";
+    let num_tests = 1000;
+    let mut successful_detections = 0;
+    for _ in 0..num_tests {
+        if aes::decryption_oracle(&aes::rnd_encryption_oracle)? {
+            successful_detections += 1;
+        }
+    }
 
-    let plain_text = aes::decrypt_cbc_128(&cipher_text, key)?;
-
-    let cipher_text = aes::encryption_oracle(&plain_text)?;
-
-    let _ecb_encrypted = aes::is_ecb_encrypted(&cipher_text)?;
-
-    print_challenge_result(11, true, Some("Impl Could be better"));
+    print_challenge_result(
+        11,
+        num_tests == successful_detections,
+        Some("Detecting aes-ecb-128 with pkcs padding and random data"),
+    );
 
     Ok(())
 }
 
 pub fn challenge12() -> Result<(), Error> {
-    let cipher_text = base64::read_encoded_file("10.txt")?;
-    let key = b"YELLOW SUBMARINE";
+    let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
 
-    let _plain_text = aes::decrypt_cbc_128(&cipher_text, key)?;
-
+    let _plain_text = aes::break_ecb_128_message(&unknown_text)?;
+    // println!("{}", Wrap(_plain_text));
+    print_challenge_result(12, true, Some("Breaking  aes-ecb-128"));
     Ok(())
 }

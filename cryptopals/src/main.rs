@@ -7,7 +7,6 @@ fn main() -> Result<(), Error> {
     set1()?;
 
     set2()?;
-    // challenge12()?;
 
     Ok(())
 }
