@@ -75,7 +75,7 @@ pub fn encrypt_cbc_128_with_iv(
         let idx = i * 16;
 
         for j in 0..16 {
-            blocks[idx + j] = blocks[idx + j] ^ prev_block[j];
+            blocks[idx + j] ^= prev_block[j];
         }
 
         encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
@@ -108,7 +108,7 @@ pub fn decrypt_cbc_128_with_iv(
         decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
 
         for j in 0..16 {
-            blocks[idx + j] = blocks[idx + j] ^ prev_block[j];
+            blocks[idx + j] ^= prev_block[j];
         }
 
         prev_block = block.to_vec();

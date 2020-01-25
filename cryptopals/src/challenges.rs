@@ -4,6 +4,28 @@ use crate::common;
 use common::Wrap;
 use std::io::Error;
 
+pub fn set1() -> Result<(), Error> {
+    challenge1();
+    challenge2();
+    challenge3();
+    challenge4()?;
+    challenge5();
+    challenge6()?;
+    challenge7()?;
+    challenge8()?;
+
+    Ok(())
+}
+
+pub fn set2() -> Result<(), Error> {
+    challenge9()?;
+    challenge10()?;
+    challenge11()?;
+    challenge12()?;
+
+    Ok(())
+}
+
 fn print_challenge_result(challenge_num: u32, success: bool, message: Option<&str>) {
     let mut msg = String::new();
     if let Some(m) = message {
@@ -68,10 +90,8 @@ pub fn challenge4() -> Result<(), Error> {
     let file = File::open("4.txt").unwrap();
     let reader = BufReader::new(file);
 
-    let mut found_message: (i32, u8, Vec<u8>, u32) = (0, 0, vec![], 0);
-    let mut line_num = 0;
-    for line in reader.lines() {
-        line_num += 1;
+    let mut found_message: (i32, u8, Vec<u8>, usize) = (0, 0, vec![], 0);
+    for (line_num, line) in reader.lines().enumerate() {
         let bytes = hex_decode_string(&line?);
         let key = find_single_char_key(&bytes);
         let msg = single_byte_xor(&bytes, key);
@@ -140,13 +160,11 @@ pub fn challenge8() -> Result<(), Error> {
     let file = File::open("8.txt").unwrap();
     let reader = BufReader::new(file);
 
-    let mut num_matches: Vec<(u32, u32)> = Vec::new();
+    let mut num_matches: Vec<(u32, usize)> = Vec::new();
 
-    let mut line_num = 0;
-    for line in reader.lines() {
+    for (line_num, line) in reader.lines().enumerate() {
         let cipher_text = common::hex_decode_string(&line?);
 
-        line_num += 1;
         let mut matches = 0;
 
         let blocks: Vec<u8> = cipher_text.to_vec();
@@ -183,7 +201,7 @@ pub fn challenge9() -> Result<(), Error> {
 
     aes::pad_message_pkcs7(&mut msg, key_len)?;
 
-    println!("{:2x?}", msg);
+    // println!("{:2x?}", msg);
     print_challenge_result(9, true, None);
     Ok(())
 }

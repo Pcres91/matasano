@@ -1,22 +1,13 @@
 #![allow(dead_code)]
 use std::io::Error;
 
-use crypto::challenges;
+use crypto::challenges::*;
 
 fn main() -> Result<(), Error> {
-    // challenge1();
-    // challenge2();
-    // challenge3();
-    // challenge4()?;
-    // challenge5();
-    // challenge6()?;
-    // challenge7()?;
-    // challenge8()?;
+    set1()?;
 
-    challenges::challenge9()?;
-    // challenge10()?;
-    // challenge11()?;
-    // challenges::challenge12()?;
+    set2()?;
+    // challenge12()?;
 
     Ok(())
 }
