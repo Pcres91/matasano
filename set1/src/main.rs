@@ -48,7 +48,7 @@ fn challenge3() {
     print_challenge_result(3, result == expected_result, None);
 }
 
-fn challenge4() {
+fn challenge4() -> Result<(), Error> {
     use common::{
         find_single_char_key, get_common_letter_frequencies, hex_decode_string, single_byte_xor,
     };
@@ -58,19 +58,23 @@ fn challenge4() {
     let file = File::open("4.txt").unwrap();
     let reader = BufReader::new(file);
 
-    let mut found_message: (i32, u8, Vec<u8>) = (0, 0, vec![]);
+    let mut found_message: (i32, u8, Vec<u8>, u32) = (0, 0, vec![], 0);
+    let mut line_num = 0;
     for line in reader.lines() {
-        let copy = line.unwrap();
-        let bytes = hex_decode_string(&copy);
+        line_num += 1;
+        let bytes = hex_decode_string(&line?);
         let key = find_single_char_key(&bytes);
         let msg = single_byte_xor(&bytes, key);
         let freq_count = get_common_letter_frequencies(&msg);
         if freq_count > found_message.0 {
-            found_message = (freq_count, key, msg);
+            found_message = (freq_count, key, msg, line_num);
         }
     }
 
-    print_challenge_result(4, true, Some(&Wrap(found_message.2).to_string()))
+    let result = format!("line {}: {}", found_message.3, &Wrap(found_message.2));
+    print_challenge_result(4, true, Some(&result));
+
+    Ok(())
 }
 
 fn challenge5() {
@@ -164,13 +168,13 @@ fn challenge8() -> Result<(), Error> {
 }
 
 fn main() -> Result<(), Error> {
-    // challenge1();
-    // challenge2();
-    // challenge3();
-    // challenge4();
-    // challenge5();
-    // challenge6()?;
-    // challenge7()?;
+    challenge1();
+    challenge2();
+    challenge3();
+    challenge4()?;
+    challenge5();
+    challenge6()?;
+    challenge7()?;
     challenge8()?;
 
     Ok(())
