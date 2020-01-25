@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::io::{Cursor, Error};
+use std::io::{Cursor, Error, ErrorKind};
 use std::result::Result;
 
 extern crate num_bigint as bigint;
@@ -246,4 +246,27 @@ pub fn slice_by_byte_with_idx(data: &[u8], key_size: usize) -> BTreeMap<usize, V
     }
 
     sliced_data
+}
+
+pub fn pad_message_pkcs7(message: &mut Vec<u8>, block_byte_length: usize) -> Result<(), Error> {
+    let final_block_len = message.len() % block_byte_length;
+
+    let num_padded_bytes = block_byte_length - final_block_len;
+    if num_padded_bytes > 0xff {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!(
+                "pad_message_pkcs7(): Cannot pad with {} bytes",
+                num_padded_bytes
+            ),
+        ));
+    }
+
+    // pad with bytes of the length of padding
+    let padding_val: u8 = num_padded_bytes as u8;
+    let padding = vec![padding_val; num_padded_bytes];
+
+    message.extend_from_slice(&padding);
+
+    Ok(())
 }

@@ -167,15 +167,33 @@ fn challenge8() -> Result<(), Error> {
     Ok(())
 }
 
+fn challenge9() -> Result<(), Error> {
+    let mut msg = b"YELLO".to_vec();
+    let key_len = 16;
+
+    common::pad_message_pkcs7(&mut msg, key_len)?;
+
+    println!("{:2x?}", msg);
+    Ok(())
+}
+
+fn challenge10() -> Result<(), Error> {
+    
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
-    challenge1();
-    challenge2();
-    challenge3();
-    challenge4()?;
-    challenge5();
-    challenge6()?;
-    challenge7()?;
-    challenge8()?;
+    // challenge1();
+    // challenge2();
+    // challenge3();
+    // challenge4()?;
+    // challenge5();
+    // challenge6()?;
+    // challenge7()?;
+    // challenge8()?;
+
+    // challenge9()?;
+    challenge10()?;
 
     Ok(())
 }

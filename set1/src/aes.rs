@@ -50,6 +50,10 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Er
     Ok(blocks)
 }
 
+pub fn decrypt_cbc_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+    Ok(vec![])
+}
+
 fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
     if expanded_key.len() != 176 {
         return Err(Error::new(
