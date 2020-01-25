@@ -200,22 +200,10 @@ fn challenge11() -> Result<(), Error> {
 
     let cipher_text = aes::encryption_oracle(&plain_text)?;
 
-    let mut matches = 0;
-    let mut counter = 0;
-    let blocks: Vec<u8> = cipher_text.to_vec();
-    let num_blocks = blocks.len() / 16;
-    for i in 0..num_blocks - 1 {
-        let block = &blocks[i * 16..i * 16 + 16];
-        for j in i + 1..num_blocks {
-            counter += 1;
-            let next_block = &blocks[j * 16..j * 16 + 16];
-            if block == next_block {
-                matches += 1;
-            }
-        }
-    }
-    println!("tests: {}", counter);
-    println!("matches: {}", matches);
+    let _ecb_encrypted = aes::is_ecb_encrypted(&cipher_text)?;
+
+    print_challenge_result(11, true, Some("Impl Could be better"));
+
     Ok(())
 }
 

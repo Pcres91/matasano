@@ -164,6 +164,27 @@ pub fn encryption_oracle(plain_text: &[u8]) -> Result<Vec<u8>, Error> {
     }
 }
 
+pub fn is_ecb_encrypted(cipher_text: &[u8]) -> Result<bool, Error> {
+    let mut matches = 0;
+    let blocks: Vec<u8> = cipher_text.to_vec();
+    let num_blocks = blocks.len() / 16;
+    for i in 0..num_blocks - 1 {
+        let block = &blocks[i * 16..i * 16 + 16];
+        for j in i + 1..num_blocks {
+            let next_block = &blocks[j * 16..j * 16 + 16];
+            if block == next_block {
+                matches += 1;
+            }
+        }
+    }
+
+    if matches > 0 {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
 fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {
     if expanded_key.len() != 176 {
         return Err(Error::new(
