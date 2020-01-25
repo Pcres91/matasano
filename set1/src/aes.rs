@@ -1,6 +1,6 @@
 use std::io::{Error, ErrorKind};
 
-pub fn encrypt_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if plain_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -14,10 +14,9 @@ pub fn encrypt_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
         ));
     }
 
-    let mut blocks: Vec<u8> = plain_text.to_vec();
-
     let expanded_key = expand_key(key)?;
 
+    let mut blocks: Vec<u8> = plain_text.to_vec();
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
         encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
@@ -26,7 +25,7 @@ pub fn encrypt_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(blocks)
 }
 
-pub fn decrypt_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
+pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
     if cipher_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -40,10 +39,9 @@ pub fn decrypt_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error>
         ));
     }
 
-    let mut blocks: Vec<u8> = cipher_text.to_vec();
-
     let expanded_key = expand_key(key)?;
 
+    let mut blocks: Vec<u8> = cipher_text.to_vec();
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
         decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
@@ -63,7 +61,7 @@ fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error>
         ));
     }
 
-    apply_key(block, &expanded_key[0..16])?;
+    apply_key(block, &expanded_key[..16])?;
 
     for round in 1..10 {
         mix_and_sub_rows(block)?;
@@ -102,7 +100,7 @@ fn decrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error>
 
     //final round
     inverse_mix_and_sub_rows(block)?;
-    apply_key(block, &expanded_key[0..16])?;
+    apply_key(block, &expanded_key[..16])?;
 
     Ok(())
 }

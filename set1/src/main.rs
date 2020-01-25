@@ -111,22 +111,67 @@ fn challenge7() -> Result<(), Error> {
 
     let key = b"YELLOW SUBMARINE";
 
-    let _plain_text = aes::decrypt_128(&cipher, key)?;
+    let _plain_text = aes::decrypt_ecb_128(&cipher, key)?;
 
-    println!("{}", Wrap(_plain_text));
+    // println!("{}", Wrap(_plain_text));
 
     print_challenge_result(7, true, Some("Print the text if you want"));
     Ok(())
 }
 
+fn challenge8() -> Result<(), Error> {
+    use std::fs::File;
+    use std::io::{prelude::*, BufReader};
+
+    let file = File::open("8.txt").unwrap();
+    let reader = BufReader::new(file);
+
+    let mut num_matches: Vec<(u32, u32)> = Vec::new();
+
+    let mut line_num = 0;
+    for line in reader.lines() {
+        let cipher_text = common::hex_decode_string(&line?);
+
+        line_num += 1;
+        let mut matches = 0;
+
+        let blocks: Vec<u8> = cipher_text.to_vec();
+        let num_blocks = blocks.len() / 16;
+        for i in 0..num_blocks - 1 {
+            let block = &blocks[i * 16..i * 16 + 16];
+            for j in i + 1..num_blocks {
+                let next_block = &blocks[j * 16..j * 16 + 16];
+                if block == next_block {
+                    matches += 1;
+                }
+            }
+        }
+        if matches > 0 {
+            num_matches.push((matches, line_num));
+        }
+    }
+
+    print_challenge_result(
+        8,
+        num_matches.len() == 1,
+        Some(&format!(
+            "line {} had {} identical blocks",
+            num_matches[0].1, num_matches[0].0
+        )),
+    );
+
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
-    challenge1();
-    challenge2();
-    challenge3();
-    challenge4();
-    challenge5();
-    challenge6()?;
-    challenge7()?;
+    // challenge1();
+    // challenge2();
+    // challenge3();
+    // challenge4();
+    // challenge5();
+    // challenge6()?;
+    // challenge7()?;
+    challenge8()?;
 
     Ok(())
 }
