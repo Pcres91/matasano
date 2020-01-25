@@ -50,8 +50,64 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Er
     Ok(blocks)
 }
 
+pub fn encrypt_cbc_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+    let iv = vec![0u8; 16];
+    Ok(encrypt_cbc_128_with_iv(plain_text, key, &iv)?)
+}
+
+pub fn encrypt_cbc_128_with_iv(
+    cipher_text: &[u8],
+    key: &[u8],
+    iv: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let expanded_key = expand_key(key)?;
+
+    let mut blocks: Vec<u8> = cipher_text.to_vec();
+    let mut prev_block = iv.to_vec();
+
+    for i in 0..blocks.len() / 16 {
+        let idx = i * 16;
+
+        for j in 0..16 {
+            blocks[idx + j] = blocks[idx + j] ^ prev_block[j];
+        }
+
+        encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
+
+        prev_block = blocks[idx..idx + 16].to_vec();
+    }
+
+    Ok(blocks)
+}
+
 pub fn decrypt_cbc_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
-    Ok(vec![])
+    let iv = vec![0u8; 16];
+    Ok(decrypt_cbc_128_with_iv(cipher_text, key, &iv)?)
+}
+
+pub fn decrypt_cbc_128_with_iv(
+    cipher_text: &[u8],
+    key: &[u8],
+    iv: &[u8],
+) -> Result<Vec<u8>, Error> {
+    let expanded_key = expand_key(key)?;
+
+    let mut blocks: Vec<u8> = cipher_text.to_vec();
+    let mut prev_block = iv.to_vec();
+
+    for i in 0..blocks.len() / 16 {
+        let idx = i * 16;
+        let block = blocks[idx..idx + 16].to_vec();
+
+        decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
+
+        for j in 0..16 {
+            blocks[idx + j] = blocks[idx + j] ^ prev_block[j];
+        }
+
+        prev_block = block.to_vec();
+    }
+    Ok(blocks)
 }
 
 fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<(), Error> {

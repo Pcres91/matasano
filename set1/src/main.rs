@@ -93,9 +93,9 @@ fn challenge5() {
 fn challenge6() -> Result<(), Error> {
     use common::{find_key_size, find_single_char_key, slice_by_byte};
 
-    let cipher = base64::read_encoded_file("6.txt").unwrap();
+    let cipher = base64::read_encoded_file("6.txt")?;
 
-    let key_size = find_key_size(&cipher, (2, 40), 20).unwrap();
+    let key_size = find_key_size(&cipher, (2, 40), 20)?;
 
     let sliced_data = slice_by_byte(&cipher, key_size);
 
@@ -178,7 +178,17 @@ fn challenge9() -> Result<(), Error> {
 }
 
 fn challenge10() -> Result<(), Error> {
-    
+    let cipher_text = base64::read_encoded_file("10.txt")?;
+    let key = b"YELLOW SUBMARINE";
+
+    let plain_text = aes::decrypt_cbc_128(&cipher_text, key)?;
+
+    // println!("{}", Wrap(plain_text));
+
+    let cipher_again = aes::encrypt_cbc_128(&plain_text, key)?;
+
+    print_challenge_result(10, cipher_text == cipher_again, None);
+
     Ok(())
 }
 
