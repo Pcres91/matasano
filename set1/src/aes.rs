@@ -154,7 +154,7 @@ pub fn encryption_oracle(plain_text: &[u8]) -> Result<Vec<u8>, Error> {
     // select to either encrypt ecb/cbc
     let ecb_encrypt: bool = rng.gen();
 
-    println!("ecb encryption: {}", ecb_encrypt);
+    // println!("ecb encryption: {}", ecb_encrypt);
 
     if ecb_encrypt {
         encrypt_ecb_128(&new_plain_text, &key)

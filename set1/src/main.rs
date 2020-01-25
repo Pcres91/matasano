@@ -207,6 +207,15 @@ fn challenge11() -> Result<(), Error> {
     Ok(())
 }
 
+fn challenge12() -> Result<(), Error> {
+    let cipher_text = base64::read_encoded_file("10.txt")?;
+    let key = b"YELLOW SUBMARINE";
+
+    let _plain_text = aes::decrypt_cbc_128(&cipher_text, key)?;
+
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
     // challenge1();
     // challenge2();
@@ -219,7 +228,8 @@ fn main() -> Result<(), Error> {
 
     // challenge9()?;
     // challenge10()?;
-    challenge11()?;
+    // challenge11()?;
+    challenge12()?;
 
     Ok(())
 }
