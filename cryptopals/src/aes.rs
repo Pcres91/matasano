@@ -134,7 +134,7 @@ pub fn decrypt_cbc_128_with_iv(
     Ok(blocks)
 }
 
-pub fn break_ecb_128_message(cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn break_ecb_128_ciphertext(cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
     let block_size = find_block_length(&cipher_text, &ecb_encryption_oracle)?;
     if block_size != 16 {
         return Err(Error::new(
@@ -158,11 +158,12 @@ pub fn break_ecb_128_message(cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
     let mut new_input_block = vec![b'A'; 16];
     let mut decrypted_char = '\0';
     let mut stripped_unknown_text = cipher_text.to_vec();
-    while stripped_unknown_text.len() > 0 {
-        let mut max_idx = 16;
-        if stripped_unknown_text.len() < 16 {
-            max_idx = stripped_unknown_text.len();
-        }
+    while !stripped_unknown_text.is_empty() {
+        let max_idx = if stripped_unknown_text.len() < 16 {
+            stripped_unknown_text.len()
+        } else {
+            16
+        };
         for char_idx in 0..max_idx {
             let input_block = vec![b'A'; block_size - char_idx - 1];
             let ecb_input_block_with_unkown =

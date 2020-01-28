@@ -174,7 +174,7 @@ pub fn challenge8() -> Result<(), Error> {
 
     print_challenge_result(
         8,
-        lines_in_ecb_mode.len() > 0,
+        !lines_in_ecb_mode.is_empty(),
         Some("detecting aes-ecb-128"),
     );
 
@@ -232,8 +232,12 @@ pub fn challenge11() -> Result<(), Error> {
 pub fn challenge12() -> Result<(), Error> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
 
-    let _plain_text = aes::break_ecb_128_message(&unknown_text)?;
+    let _plain_text = aes::break_ecb_128_ciphertext(&unknown_text)?;
     // println!("{}", Wrap(_plain_text));
     print_challenge_result(12, true, Some("Breaking  aes-ecb-128"));
+    Ok(())
+}
+
+pub fn challenge13() -> Result<(), Error> {
     Ok(())
 }
