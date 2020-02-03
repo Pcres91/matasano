@@ -5,15 +5,6 @@ pub const KNOWN_KEY: [u8; 16] = [
 ];
 
 pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
-    if plain_text.len() % 16 != 0 {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!(
-                "encrypt_ecb_128(): Data must be in blocks of 16 bytes, got {}",
-                plain_text.len()
-            ),
-        ));
-    }
     if key.len() != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -24,6 +15,7 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> 
     let expanded_key = expand_key(key)?;
 
     let mut blocks: Vec<u8> = plain_text.to_vec();
+    pkcs7_pad(&mut blocks, 16)?;
     for i in 0..(blocks.len() / 16) {
         let idx = i * 16;
         encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;

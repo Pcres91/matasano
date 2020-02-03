@@ -17,7 +17,7 @@ fn test_adding_a_profile() {
 #[test]
 fn test_return_from_profile_for() {
     unsafe {
-        let out = profile_for("next@tester.com");
+        let out = profile_for("next@tester.com").unwrap();
         assert_eq!(
             out,
             format!("email=next@tester.com&uid={}&role=User", NEXT_UID - 1)

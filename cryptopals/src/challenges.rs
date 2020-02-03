@@ -1,6 +1,7 @@
 use crate::aes;
 use crate::base64;
 use crate::common;
+use crate::user_storage;
 use common::Wrap;
 use std::io::Error;
 
@@ -239,5 +240,11 @@ pub fn challenge12() -> Result<(), Error> {
 }
 
 pub fn challenge13() -> Result<(), Error> {
+    use user_storage::*;
+
+    unsafe {
+        let _encoded = profile_for("test@testers.com")?;
+    }
+
     Ok(())
 }
