@@ -29,7 +29,7 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Er
         return Err(Error::new(
             ErrorKind::InvalidData,
             format!(
-                "decrypt_ecb_128(): Data must be in blocks of 128, got {}",
+                "decrypt_ecb_128(): Data must be in blocks of 16 bytes, got {}",
                 cipher_text.len()
             ),
         ));

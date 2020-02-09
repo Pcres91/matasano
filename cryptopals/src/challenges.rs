@@ -244,15 +244,43 @@ pub fn challenge13() -> Result<(), Error> {
     use user_storage::*;
 
     unsafe {
-        let cipher_text = profile_for("tester@testers.com")?;
+        // explanation:
+        // payload ensures there are 4 distinct blocks to build after ciphered
+        // 1) user=......
+        // 2) <email contd>
+        // 3) Admin with pkcs7 padding to mimic end of message
+        // 4) <last four chars of email>&uid=0&role=
+        // note: 4 must end on "role=" so Admin block can be stitched to the end of it
+
+        // another note: unsure how to possibly deal with variably-sized uid. Just send through
+        // text with different padding accounting for its length until one hits I suppose. Would
+        // only be a few so I don't think it's an unreasonable way to hit a successful payload.
+        let mut payload = b"foo0123456789@bar123456789Admin".to_vec();
+        payload.extend_from_slice(&[11u8; 11]); // need the rest of block after admin to look like pkcs7 padding
+        payload.extend_from_slice(b".com"); // need to place "&uid=0&role=" at the end of a block, so extend email
 
         use std::str::from_utf8;
-        let _new_prof =
-            parse_cookie(from_utf8(&aes::decrypt_ecb_128(&cipher_text, &RND_KEY)?).unwrap())?;
+        let cipher_text = profile_for(from_utf8(&payload).unwrap())?;
 
-        PROFILE_STORAGE.add_from_hash(&cipher_text)?;
+        // for i in 0..cipher_text.len() / 16 {
+        //     println!(
+        //         "{}||",
+        //         Wrap(aes::decrypt_ecb_128(
+        //             &cipher_text[i * 16..i * 16 + 16],
+        //             &RND_KEY
+        //         )?)
+        //     );
+        // }
+        let mut payload_cipher = cipher_text[..32].to_vec();
+        payload_cipher.extend_from_slice(&cipher_text[48..64]);
+        payload_cipher.extend_from_slice(&cipher_text[32..48]);
+        PROFILE_STORAGE.add_from_hash(&payload_cipher)?;
 
-        println!("{:?}", PROFILE_STORAGE);
+        print_challenge_result(
+            13,
+            PROFILE_STORAGE.profiles.len() == 1,
+            Some("Sent payload without knowing key"),
+        );
     }
 
     Ok(())

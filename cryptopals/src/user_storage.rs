@@ -49,6 +49,7 @@ pub struct Profile {
 pub fn parse_cookie(cookie: &str) -> Result<Profile, Error> {
     let tokens: Vec<&str> = cookie.split(&['=', '&'][..]).collect();
 
+    // @TODO: change these all to return Error
     assert!(tokens.len() == 6);
 
     assert!(tokens[0] == "email");
