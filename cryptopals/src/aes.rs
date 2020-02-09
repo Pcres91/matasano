@@ -167,11 +167,16 @@ pub fn break_ecb_128_ciphertext(
 
     let mut result: Vec<u8> = Vec::new();
 
-    for block_num in 0..cipher_text.len() / 16 {
+    for block_num in 0..cipher_text.len() / 16 + 1 {
         let idx = block_num * 16;
+        let end_idx = if idx + 16 < cipher_text.len() {
+            idx + 16
+        } else {
+            cipher_text.len()
+        };
 
         result.extend_from_slice(&break_ecb_128_cipherblock(
-            &cipher_text[idx..idx + 16],
+            &cipher_text[idx..end_idx],
             &encryptor,
         )?);
     }
@@ -179,28 +184,29 @@ pub fn break_ecb_128_ciphertext(
     Ok(result)
 }
 
+/// block can be < 16
 pub fn break_ecb_128_cipherblock(
     block: &[u8],
     encryptor: &dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>,
-) -> Result<[u8; 16], Error> {
+) -> Result<Vec<u8>, Error> {
     let block_size = 16;
 
-    let mut result = [0u8; 16];
+    let mut result: Vec<u8> = vec![0u8; block.len()];
 
     let mut new_input_block = vec![b'A'; 16];
     let mut decrypted_char = b'\0';
 
     #[allow(clippy::needless_range_loop)]
-    for char_idx in 0..16 {
+    for char_idx in 0..block.len() {
         let input_block = vec![b'A'; block_size - char_idx - 1];
         let ecb_input_block_with_unkown = ecb_encryption_oracle(&input_block, block, encryptor)?;
         let expected_block = &ecb_input_block_with_unkown[..16];
 
-        for i in 0u8..0xff {
-            new_input_block[15] = i;
+        for i in SMART_ASCII.iter() {
+            new_input_block[15] = *i;
             let new_output = ecb_encryption_oracle(&[], &new_input_block, encryptor)?;
             if &new_output[..16] == expected_block {
-                decrypted_char = i;
+                decrypted_char = *i;
                 break;
             }
         }
@@ -810,3 +816,19 @@ mod tests {
         assert_eq!(copy.len() + block_size, block.len());
     }
 }
+
+const SMART_ASCII: [u8; 255] = [
+    32, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
+    116, 117, 118, 119, 120, 121, 122, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+    80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 39, 9, 10, 11, 12, 13, 40, 41, 42, 43, 44, 45, 46,
+    47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 33, 34, 35, 36, 37, 38,
+    91, 92, 93, 94, 95, 96, 1, 2, 3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+    26, 27, 28, 29, 30, 31, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136,
+    137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
+    156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
+    175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193,
+    194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212,
+    213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231,
+    232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250,
+    251, 252, 253, 254, 255,
+];
