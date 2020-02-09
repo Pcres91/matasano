@@ -23,6 +23,7 @@ pub fn set2() -> Result<(), Error> {
     challenge10()?;
     challenge11()?;
     challenge12()?;
+    challenge13()?;
 
     Ok(())
 }
@@ -233,7 +234,7 @@ pub fn challenge11() -> Result<(), Error> {
 pub fn challenge12() -> Result<(), Error> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
 
-    let _plain_text = aes::break_ecb_128_ciphertext(&unknown_text)?;
+    let _plain_text = aes::break_ecb_128_ciphertext(&unknown_text, &aes::encrypt_ecb_128)?;
     // println!("{}", Wrap(_plain_text));
     print_challenge_result(12, true, Some("Breaking  aes-ecb-128"));
     Ok(())
@@ -243,7 +244,15 @@ pub fn challenge13() -> Result<(), Error> {
     use user_storage::*;
 
     unsafe {
-        let _encoded = profile_for("test@testers.com")?;
+        let cipher_text = profile_for("tester@testers.com")?;
+
+        use std::str::from_utf8;
+        let _new_prof =
+            parse_cookie(from_utf8(&aes::decrypt_ecb_128(&cipher_text, &RND_KEY)?).unwrap())?;
+
+        PROFILE_STORAGE.add_from_hash(&cipher_text)?;
+
+        println!("{:?}", PROFILE_STORAGE);
     }
 
     Ok(())
