@@ -4,6 +4,17 @@ pub const KNOWN_KEY: [u8; 16] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 ];
 
+pub struct Oracle {
+    pub key: Vec<u8>,
+    pub encryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
+}
+
+impl Oracle {
+    pub fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self.encryptor)(plain_text, &self.key)
+    }
+}
+
 pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if key.len() != 16 {
         return Err(Error::new(
@@ -24,7 +35,7 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> 
     Ok(blocks)
 }
 
-pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
+pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if cipher_text.len() % 16 != 0 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -79,6 +90,28 @@ pub fn detect_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
     let num_unique_blocks = set.len();
 
     num_blocks - num_unique_blocks > 1
+}
+
+pub fn find_ecb_128_padded_block_cipher(oracle: &Oracle) -> Result<Vec<u8>, Error> {
+    let padding = vec![16u8; 32 + 15];
+
+    let cipher_text = oracle.encrypt(&padding)?;
+
+    let mut prev_block = &cipher_text[0..16];
+    for i in 1..cipher_text.len() / 16 {
+        let idx = i * 16;
+
+        if prev_block == &cipher_text[idx..idx + 16] {
+            return Ok(prev_block.to_vec());
+        }
+
+        prev_block = &cipher_text[idx..idx + 16];
+    }
+
+    Err(Error::new(
+        ErrorKind::NotFound,
+        "Couldn't find padding ciphertext",
+    ))
 }
 
 pub fn encrypt_cbc_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
@@ -141,11 +174,8 @@ pub fn decrypt_cbc_128_with_iv(
     Ok(blocks)
 }
 
-pub fn break_ecb_128_ciphertext(
-    cipher_text: &[u8],
-    encryptor: &dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>,
-) -> Result<Vec<u8>, Error> {
-    let block_size = find_block_length(&cipher_text, encryptor)?;
+pub fn break_ecb_128_ciphertext(cipher_text: &[u8], oracle: &Oracle) -> Result<Vec<u8>, Error> {
+    let block_size = find_block_length(&cipher_text, oracle)?;
     if block_size != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -156,7 +186,7 @@ pub fn break_ecb_128_ciphertext(
     let in_ecb_mode = detect_cipher_in_ecb_128_mode(&ecb_encryption_oracle(
         &vec![b'a'; block_size * 5],
         &cipher_text,
-        &encryptor,
+        oracle,
     )?);
     if !in_ecb_mode {
         return Err(Error::new(
@@ -177,7 +207,7 @@ pub fn break_ecb_128_ciphertext(
 
         result.extend_from_slice(&break_ecb_128_cipherblock(
             &cipher_text[idx..end_idx],
-            &encryptor,
+            oracle,
         )?);
     }
 
@@ -185,42 +215,47 @@ pub fn break_ecb_128_ciphertext(
 }
 
 /// block can be < 16
-pub fn break_ecb_128_cipherblock(
-    block: &[u8],
-    encryptor: &dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>,
-) -> Result<Vec<u8>, Error> {
+pub fn break_ecb_128_cipherblock(block: &[u8], oracle: &Oracle) -> Result<Vec<u8>, Error> {
     let block_size = 16;
 
     let mut result: Vec<u8> = vec![0u8; block.len()];
 
     let mut new_input_block = vec![b'A'; 16];
-    let mut decrypted_char = b'\0';
 
     #[allow(clippy::needless_range_loop)]
     for char_idx in 0..block.len() {
         let input_block = vec![b'A'; block_size - char_idx - 1];
-        let ecb_input_block_with_unkown = ecb_encryption_oracle(&input_block, block, encryptor)?;
+        let ecb_input_block_with_unkown = ecb_encryption_oracle(&input_block, block, oracle)?;
         let expected_block = &ecb_input_block_with_unkown[..16];
 
-        for i in SMART_ASCII.iter() {
-            new_input_block[15] = *i;
-            let new_output = ecb_encryption_oracle(&[], &new_input_block, encryptor)?;
-            if &new_output[..16] == expected_block {
-                decrypted_char = *i;
-                break;
-            }
-        }
-        if decrypted_char == b'\0' {
-            println!("Char couldnt be found, returning result up to point",);
-            break;
-        } else {
-            new_input_block.remove(0);
-            new_input_block.push(decrypted_char);
-            result[char_idx] = decrypted_char;
-        }
+        let decrypted_char =
+            break_ecb_128_cipherbyte(&mut new_input_block, expected_block, oracle)?;
+
+        new_input_block.remove(0);
+        new_input_block.push(decrypted_char);
+        result[char_idx] = decrypted_char;
     }
 
     Ok(result)
+}
+
+pub fn break_ecb_128_cipherbyte(
+    input_block: &mut [u8],
+    expected_block: &[u8],
+    oracle: &Oracle,
+) -> Result<u8, Error> {
+    for i in SMART_ASCII.iter() {
+        input_block[15] = *i;
+        let new_output = ecb_encryption_oracle(&[], &input_block, oracle)?;
+        if &new_output[..16] == expected_block {
+            return Ok(*i);
+        }
+    }
+
+    Err(Error::new(
+        ErrorKind::NotFound,
+        "break_ecb_128_cipherbyte(): Couldn't find a character to match",
+    ))
 }
 
 pub fn generate_key() -> Vec<u8> {
@@ -284,23 +319,20 @@ pub fn decryption_oracle(
 pub fn ecb_encryption_oracle(
     known_text: &[u8],
     cipher_text: &[u8],
-    encryptor: &dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>,
+    oracle: &Oracle,
 ) -> Result<Vec<u8>, Error> {
     let mut concatted = known_text.to_vec();
     concatted.extend_from_slice(cipher_text);
     pkcs7_pad(&mut concatted, 16)?;
 
-    Ok(encryptor(&concatted, &KNOWN_KEY)?)
+    Ok(oracle.encrypt(&concatted)?)
 }
 
-pub fn find_block_length(
-    cipher_text: &[u8],
-    encryptor: &dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>,
-) -> Result<usize, Error> {
+pub fn find_block_length(cipher_text: &[u8], oracle: &Oracle) -> Result<usize, Error> {
     let mut prev_length = 0;
     for i in 0..0xff {
         let known_text = vec![b'a'; i];
-        let new_cipher = ecb_encryption_oracle(&known_text, cipher_text, encryptor)?;
+        let new_cipher = ecb_encryption_oracle(&known_text, cipher_text, oracle)?;
 
         if prev_length == 0 {
             prev_length = new_cipher.len();

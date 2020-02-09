@@ -234,3 +234,21 @@ pub fn slice_by_byte_with_idx(data: &[u8], key_size: usize) -> BTreeMap<usize, V
 
     sliced_data
 }
+
+pub fn prefix_with_rnd_bytes(range: (usize, usize), text: &[u8]) -> Vec<u8> {
+    extern crate rand;
+    use rand::prelude::*;
+
+    let mut rng = rand::thread_rng();
+
+    let num_random_bytes = rng.gen_range(range.0, range.1);
+
+    // println!("rnd bytes: {}", num_random_bytes);
+
+    let mut res = vec![0u8; num_random_bytes];
+    rng.fill_bytes(&mut res);
+
+    res.extend_from_slice(text);
+
+    res
+}

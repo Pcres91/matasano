@@ -234,9 +234,13 @@ pub fn challenge11() -> Result<(), Error> {
 pub fn challenge12() -> Result<(), Error> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
 
-    let _plain_text = aes::break_ecb_128_ciphertext(&unknown_text, &aes::encrypt_ecb_128)?;
-    // println!("{}", Wrap(_plain_text));
-    print_challenge_result(12, true, Some("Breaking  aes-ecb-128"));
+    let oracle = aes::Oracle {
+        key: aes::generate_key(),
+        encryptor: Box::new(aes::encrypt_ecb_128),
+    };
+    let _plain_text = aes::break_ecb_128_ciphertext(&unknown_text, &oracle)?;
+    println!("{}", Wrap(_plain_text));
+    print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
     Ok(())
 }
 
@@ -283,5 +287,126 @@ pub fn challenge13() -> Result<(), Error> {
         );
     }
 
+    Ok(())
+}
+
+pub fn challenge14() -> Result<(), Error> {
+    let string_to_find = b"Let's see if we can decipher this";
+
+    let encrypt_with_rnd_prefix = |plain_text: &[u8], key: &[u8]| -> Result<Vec<u8>, Error> {
+        use common::prefix_with_rnd_bytes;
+        let rnd_bytes_range = (0, 50);
+        let text = prefix_with_rnd_bytes(rnd_bytes_range, &plain_text);
+        aes::encrypt_ecb_128(&text, &key)
+    };
+
+    let oracle = aes::Oracle {
+        key: aes::generate_key(),
+        encryptor: Box::new(encrypt_with_rnd_prefix),
+    };
+
+    let padding_cipher_block = aes::find_ecb_128_padded_block_cipher(&oracle)?;
+
+    let mut found_text_length = false;
+
+    let mut num_pad = 0usize;
+    while !found_text_length {
+        let mut padding = vec![16u8; 16];
+        padding.extend_from_slice(&vec![b'A'; num_pad]);
+        padding.extend_from_slice(&string_to_find[..]);
+        let cipher = oracle.encrypt(&padding)?;
+
+        if &cipher[cipher.len() - 16..cipher.len()] == &padding_cipher_block[..] {
+            for i in 0..cipher.len() / 16 - 1 {
+                let idx = i * 16;
+                if &cipher[idx..idx + 16] == &padding_cipher_block[..] {
+                    found_text_length = true;
+                    println!("text length: {}", cipher.len() - (idx + 16 + num_pad) - 16);
+                }
+            }
+            num_pad += 1;
+        }
+    }
+
+    assert_eq!(true, false);
+
+    let mut num_chars_found = 0;
+    let mut found_chars: Vec<u8> = Vec::new();
+
+    while num_chars_found != 16 {
+        let mut plain_text = vec![b'A'; 15 + 32 + 15 - num_chars_found];
+        println!("num As: {}", plain_text.len());
+
+        plain_text.extend_from_slice(&string_to_find[..]);
+
+        let mut found = false;
+        let mut idx_of_payload_block = 0;
+        let mut ciphertext = vec![0u8; 0];
+        while !found {
+            // let new_plain_text = common::prefix_with_rnd_bytes(rnd_bytes_range, &plain_text);
+            ciphertext = oracle.encrypt(&plain_text)?;
+
+            // let mut tmp = vec![b's'];
+            // tmp.extend_from_slice(&plain_text);
+            // println!("len: {} - {}", 40, 40 + &plain_text[40..].len());
+            // println!("{:?}", std::str::from_utf8(&plain_text[40..]).unwrap());
+            // ciphertext = oracle.encrypt(&tmp)?;
+
+            let mut num_consecutive_matches = 0;
+            let mut prev_block = &ciphertext[0..16];
+
+            // println!("len: {}", ciphertext.len());
+            for i in 1..ciphertext.len() / 16 {
+                let idx = i * 16;
+
+                // println!("idx: {}", idx);
+                // println!("{:?}\n{:?}", prev_block, &ciphertext[idx..idx + 16]);
+                if prev_block == &ciphertext[idx..idx + 16] {
+                    // println!("match",);
+                    num_consecutive_matches += 1;
+                    idx_of_payload_block = i;
+                } else if num_consecutive_matches > 0 {
+                    break;
+                }
+                prev_block = &ciphertext[idx..idx + 16];
+
+                if num_consecutive_matches > 2 {
+                    break;
+                }
+            }
+
+            // println!("matches: {}", num_consecutive_matches);
+
+            if num_consecutive_matches == 1 {
+                found = true;
+                idx_of_payload_block += 1;
+            }
+        }
+
+        let payload_idx = idx_of_payload_block * 16;
+        let mut input_block = vec![b'A'; 15 - num_chars_found];
+        input_block.extend_from_slice(&found_chars[..]);
+        input_block.push(b'A');
+        println!("{}", std::str::from_utf8(&input_block).unwrap());
+
+        println!(
+            "{}",
+            std::str::from_utf8(&aes::decrypt_ecb_128(
+                &ciphertext[payload_idx..payload_idx + 16],
+                &oracle.key
+            )?)
+            .unwrap()
+        );
+        // let expected_block = oracle.encrypt(b"AAAAAAAAAAAAAAAL")?;
+        let found_byte = aes::break_ecb_128_cipherbyte(
+            &mut input_block,
+            &ciphertext[payload_idx..payload_idx + 16],
+            &oracle,
+        )?;
+
+        println!("byte: {}", found_byte as char);
+        num_chars_found += 1;
+        found_chars.push(found_byte);
+    }
     Ok(())
 }
