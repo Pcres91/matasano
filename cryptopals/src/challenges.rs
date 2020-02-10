@@ -317,7 +317,7 @@ pub fn challenge14() -> Result<(), Error> {
         padding.extend_from_slice(&string_to_find[..]);
         let cipher = oracle.encrypt(&padding)?;
 
-        if &cipher[cipher.len() - 16..cipher.len()] == &padding_cipher_block[..] {
+        if cipher[cipher.len() - 16..cipher.len()] == padding_cipher_block[..] {
             for i in 0..cipher.len() / 16 - 1 {
                 let idx = i * 16;
                 if &cipher[idx..idx + 16] == &padding_cipher_block[..] {
@@ -330,51 +330,49 @@ pub fn challenge14() -> Result<(), Error> {
         }
     }
 
-    let mut num_chars_found = 0;
     let mut found_chars: Vec<u8> = Vec::new();
 
     // this doesn't work: padding length can't be guaranteed of course XD
     // need to get cipher with my known padding, find my input block, then the next
     // block must be the payload with which we decrypt.
     while found_chars.len() != 16 {
-        let padding_len = 16 - ((text_length - 1 - found_chars.len()) % 16);
-        let reverse_idx = (1 + ((padding_len + text_length - found_chars.len()) / 16)) * 16;
-        println!("pad len: {}, rev idx: {}", padding_len, reverse_idx);
+        let mut payload = vec![16u8; 16];
 
-        let mut plain_text = vec![b'A'; 15 - found_chars.len()];
+        let num_known_bytes = 15 - found_chars.len();
+        payload.extend_from_slice(&vec![b'A'; num_known_bytes]);
+        // payload.extend_from_slice(&found_chars);
 
-        plain_text.extend_from_slice(&string_to_find[..]);
+        payload.extend_from_slice(&string_to_find[..]);
+        println!("{}", Wrap(payload[16..32].to_vec()));
 
-        let cipher_text = oracle.encrypt(&plain_text)?;
+        let cipher = oracle.encrypt(&payload)?;
 
-        let payload_idx = cipher_text.len() - reverse_idx;
-        println!(
-            "cipher len: {}, block idx: {}",
-            cipher_text.len(),
-            payload_idx
-        );
+        for i in 0..cipher.len() / 16 - 1 {
+            let idx = i * 16;
 
-        let mut input_block = vec![b'A'; 15 - found_chars.len()];
-        input_block.extend_from_slice(&found_chars[..]);
-        input_block.push(b'A');
-        println!("input: {}", std::str::from_utf8(&input_block[..]).unwrap());
-
-        println!(
-            "expected: {}",
-            Wrap(aes::decrypt_ecb_128(
-                &cipher_text[payload_idx..payload_idx + 16],
-                &oracle.key
-            )?)
-        );
-        let found_byte = aes::break_ecb_128_cipherbyte(
-            &mut input_block,
-            &cipher_text[payload_idx..payload_idx + 16],
-            &oracle,
-        )?;
-
-        println!("byte: {}", found_byte as char);
-        num_chars_found += 1;
-        found_chars.push(found_byte);
+            if cipher[idx..idx + 16] == padding_cipher_block[..] {
+                println!("{}", payload.len());
+                let mut input_block: Vec<u8> = payload[16..31].to_vec();
+                println!("{}", input_block.len());
+                input_block.push(b'A');
+                println!("{}", Wrap(input_block.to_vec()));
+                println!(
+                    "{}",
+                    Wrap(aes::decrypt_ecb_128(
+                        &cipher[idx + 16..idx + 32].to_vec(),
+                        &oracle.key
+                    )?)
+                );
+                for i in aes::SMART_ASCII.iter() {
+                    input_block[15] = *i;
+                    let new_output = aes::encrypt_ecb_128(&input_block, &oracle.key)?;
+                    if new_output[..16] == cipher[idx + 16..idx + 32] {
+                        println!("{}", *i);
+                        found_chars.push(*i);
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }
