@@ -330,49 +330,85 @@ pub fn challenge14() -> Result<(), Error> {
         }
     }
 
+    let mut result: Vec<u8> = Vec::new();
+
+    let num_rounds = if text_length % 16 == 0 {
+        text_length / 16
+    } else {
+        text_length / 16 + 1
+    };
+
     let mut found_chars: Vec<u8> = Vec::new();
 
-    // this doesn't work: padding length can't be guaranteed of course XD
-    // need to get cipher with my known padding, find my input block, then the next
-    // block must be the payload with which we decrypt.
-    while found_chars.len() != 16 {
-        let mut payload = vec![16u8; 16];
+    for block_idx in 0..num_rounds {
+        let end_block_idx = if block_idx * 16 + 16 > text_length {
+            text_length
+        } else {
+            block_idx * 16 + 16
+        };
 
-        let num_known_bytes = 15 - found_chars.len();
-        payload.extend_from_slice(&vec![b'A'; num_known_bytes]);
-        // payload.extend_from_slice(&found_chars);
+        let num_chars_to_find = end_block_idx - block_idx * 16;
+        while found_chars.len() != num_chars_to_find {
+            let mut payload = vec![16u8; 16];
 
-        payload.extend_from_slice(&string_to_find[..]);
-        println!("{}", Wrap(payload[16..32].to_vec()));
+            let num_known_bytes = 15 - found_chars.len();
+            payload.extend_from_slice(&vec![b'A'; num_known_bytes]);
 
-        let cipher = oracle.encrypt(&payload)?;
+            payload.extend_from_slice(&string_to_find[block_idx * 16..end_block_idx]);
 
-        for i in 0..cipher.len() / 16 - 1 {
-            let idx = i * 16;
+            let cipher = oracle.encrypt(&payload)?;
 
-            if cipher[idx..idx + 16] == padding_cipher_block[..] {
-                println!("{}", payload.len());
-                let mut input_block: Vec<u8> = payload[16..31].to_vec();
-                println!("{}", input_block.len());
-                input_block.push(b'A');
-                println!("{}", Wrap(input_block.to_vec()));
-                println!(
-                    "{}",
-                    Wrap(aes::decrypt_ecb_128(
-                        &cipher[idx + 16..idx + 32].to_vec(),
-                        &oracle.key
-                    )?)
-                );
-                for i in aes::SMART_ASCII.iter() {
-                    input_block[15] = *i;
-                    let new_output = aes::encrypt_ecb_128(&input_block, &oracle.key)?;
-                    if new_output[..16] == cipher[idx + 16..idx + 32] {
-                        println!("{}", *i);
-                        found_chars.push(*i);
+            for i in 0..cipher.len() / 16 - 1 {
+                let idx = i * 16;
+
+                if cipher[idx..idx + 16] == padding_cipher_block[..] {
+                    let mut char_decryptor_block: Vec<u8> = payload[16..31].to_vec();
+                    char_decryptor_block.push(b'A');
+
+                    // println!("{}", Wrap(char_decryptor_block.to_vec()));
+                    // println!(
+                    //     "{}",
+                    //     Wrap(aes::decrypt_ecb_128(
+                    //         &cipher[idx + 16..idx + 32].to_vec(),
+                    //         &oracle.key
+                    //     )?)
+                    // );
+
+                    for i in aes::SMART_ASCII.iter() {
+                        char_decryptor_block[15] = *i;
+
+                        let mut char_decrypt_cipher = oracle.encrypt(&char_decryptor_block)?;
+                        while false {
+                            if char_decrypt_cipher
+                                [char_decrypt_cipher.len() - 16..char_decrypt_cipher.len()]
+                                == padding_cipher_block[..]
+                            {
+                                break;
+                            }
+
+                            char_decrypt_cipher = oracle.encrypt(&char_decryptor_block)?;
+                        }
+
+                        if char_decrypt_cipher
+                            [char_decrypt_cipher.len() - 32..char_decrypt_cipher.len() - 16]
+                            == cipher[idx + 16..idx + 32]
+                        {
+                            found_chars.push(*i);
+                        }
                     }
                 }
             }
         }
+        println!("deciphered block",);
+        result.extend_from_slice(&found_chars);
+        found_chars.clear();
     }
+    println!("",);
+
+    print_challenge_result(
+        14,
+        std::str::from_utf8(&result) == std::str::from_utf8(string_to_find),
+        Some("Deciphered text with random prefix"),
+    );
     Ok(())
 }
