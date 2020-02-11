@@ -27,8 +27,7 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> 
 
     let mut blocks: Vec<u8> = plain_text.to_vec();
     pkcs7_pad(&mut blocks, 16)?;
-    for i in 0..(blocks.len() / 16) {
-        let idx = i * 16;
+    for idx in (0..blocks.len() as usize).step_by(16) {
         encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
@@ -55,8 +54,7 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error>
     let expanded_key = expand_key(key)?;
 
     let mut blocks: Vec<u8> = cipher_text.to_vec();
-    for i in 0..(blocks.len() / 16) {
-        let idx = i * 16;
+    for idx in (0..blocks.len()).step_by(16) {
         decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
@@ -79,15 +77,14 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error>
 }
 
 pub fn detect_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
-    let num_blocks = cipher_text.len() / 16;
-
     use std::collections::hash_set::HashSet;
     let mut set: HashSet<Vec<u8>> = HashSet::new();
-    for i in 0..num_blocks {
-        let idx = i * 16;
+    for idx in (0..cipher_text.len()).step_by(16) {
         set.insert(cipher_text[idx..idx + 16].to_vec());
     }
     let num_unique_blocks = set.len();
+
+    let num_blocks = cipher_text.len() / 16;
 
     num_blocks - num_unique_blocks > 1
 }
@@ -98,9 +95,7 @@ pub fn find_ecb_128_padded_block_cipher(oracle: &Oracle) -> Result<Vec<u8>, Erro
     let cipher_text = oracle.encrypt(&padding)?;
 
     let mut prev_block = &cipher_text[0..16];
-    for i in 1..cipher_text.len() / 16 {
-        let idx = i * 16;
-
+    for idx in (16..cipher_text.len()).step_by(16) {
         if prev_block == &cipher_text[idx..idx + 16] {
             return Ok(prev_block.to_vec());
         }
@@ -129,9 +124,7 @@ pub fn encrypt_cbc_128_with_iv(
     let mut blocks: Vec<u8> = cipher_text.to_vec();
     let mut prev_block = iv.to_vec();
 
-    for i in 0..blocks.len() / 16 {
-        let idx = i * 16;
-
+    for idx in (0..blocks.len()).step_by(16) {
         for j in 0..16 {
             blocks[idx + j] ^= prev_block[j];
         }
@@ -159,8 +152,7 @@ pub fn decrypt_cbc_128_with_iv(
     let mut blocks: Vec<u8> = cipher_text.to_vec();
     let mut prev_block = iv.to_vec();
 
-    for i in 0..blocks.len() / 16 {
-        let idx = i * 16;
+    for idx in (0..blocks.len()).step_by(16) {
         let block = blocks[idx..idx + 16].to_vec();
 
         decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
@@ -172,90 +164,6 @@ pub fn decrypt_cbc_128_with_iv(
         prev_block = block.to_vec();
     }
     Ok(blocks)
-}
-
-pub fn break_ecb_128_ciphertext(cipher_text: &[u8], oracle: &Oracle) -> Result<Vec<u8>, Error> {
-    let block_size = find_block_length(&cipher_text, oracle)?;
-    if block_size != 16 {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Breaking aes-ecb-128: Block size not found to be size 16.",
-        ));
-    }
-
-    let in_ecb_mode = detect_cipher_in_ecb_128_mode(&ecb_encryption_oracle(
-        &vec![b'a'; block_size * 5],
-        &cipher_text,
-        oracle,
-    )?);
-    if !in_ecb_mode {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Could not assert that the data is aes-ecb-128 encrypted",
-        ));
-    }
-
-    let mut result: Vec<u8> = Vec::new();
-
-    for block_num in 0..cipher_text.len() / 16 + 1 {
-        let idx = block_num * 16;
-        let end_idx = if idx + 16 < cipher_text.len() {
-            idx + 16
-        } else {
-            cipher_text.len()
-        };
-
-        result.extend_from_slice(&break_ecb_128_cipherblock(
-            &cipher_text[idx..end_idx],
-            oracle,
-        )?);
-    }
-
-    Ok(result)
-}
-
-/// block can be < 16
-pub fn break_ecb_128_cipherblock(block: &[u8], oracle: &Oracle) -> Result<Vec<u8>, Error> {
-    let block_size = 16;
-
-    let mut result: Vec<u8> = vec![0u8; block.len()];
-
-    let mut new_input_block = vec![b'A'; 16];
-
-    #[allow(clippy::needless_range_loop)]
-    for char_idx in 0..block.len() {
-        let input_block = vec![b'A'; block_size - char_idx - 1];
-        let ecb_input_block_with_unkown = ecb_encryption_oracle(&input_block, block, oracle)?;
-        let expected_block = &ecb_input_block_with_unkown[..16];
-
-        let decrypted_char =
-            break_ecb_128_cipherbyte(&mut new_input_block, expected_block, oracle)?;
-
-        new_input_block.remove(0);
-        new_input_block.push(decrypted_char);
-        result[char_idx] = decrypted_char;
-    }
-
-    Ok(result)
-}
-
-pub fn break_ecb_128_cipherbyte(
-    input_block: &mut [u8],
-    expected_block: &[u8],
-    oracle: &Oracle,
-) -> Result<u8, Error> {
-    for i in SMART_ASCII.iter() {
-        input_block[15] = *i;
-        let new_output = ecb_encryption_oracle(&[], &input_block, oracle)?;
-        if &new_output[..16] == expected_block {
-            return Ok(*i);
-        }
-    }
-
-    Err(Error::new(
-        ErrorKind::NotFound,
-        "break_ecb_128_cipherbyte(): Couldn't find a character to match",
-    ))
 }
 
 pub fn generate_key() -> Vec<u8> {
@@ -318,11 +226,11 @@ pub fn decryption_oracle(
 
 pub fn ecb_encryption_oracle(
     known_text: &[u8],
-    cipher_text: &[u8],
+    other_text: &[u8],
     oracle: &Oracle,
 ) -> Result<Vec<u8>, Error> {
     let mut concatted = known_text.to_vec();
-    concatted.extend_from_slice(cipher_text);
+    concatted.extend_from_slice(other_text);
     pkcs7_pad(&mut concatted, 16)?;
 
     Ok(oracle.encrypt(&concatted)?)
