@@ -25,6 +25,7 @@ pub fn set2() -> Result<(), Error> {
     challenge12()?;
     challenge13()?;
     challenge14()?;
+    challenge15()?;
 
     Ok(())
 }
@@ -453,5 +454,42 @@ pub fn challenge14() -> Result<(), Error> {
         std::str::from_utf8(&result) == std::str::from_utf8(string_to_find),
         Some("Deciphered text with random prefix"),
     );
+    Ok(())
+}
+
+#[allow(unused_assignments)]
+pub fn challenge15() -> Result<(), Error> {
+    let mut message = vec![0u8; 12];
+    message.extend_from_slice(&[4u8; 4]);
+
+    let mut challenge_success = true;
+
+    let res = aes::remove_pkcs7_padding(&message);
+
+    match res {
+        Ok(r) => {
+            challenge_success = message.len() - 4 == r.len();
+        }
+        Err(_) => {
+            challenge_success = false;
+        }
+    }
+
+    let mut message2 = vec![0u8; 12];
+    message2.extend_from_slice(&[4u8; 2]);
+
+    let original_length2 = message2.len();
+
+    match aes::remove_pkcs7_padding(&message2) {
+        Ok(_) => {
+            challenge_success = false;
+        }
+        Err(_) => {
+            challenge_success = original_length2 == message2.len();
+        }
+    };
+
+    print_challenge_result(15, challenge_success, Some("Function to remove padding"));
+
     Ok(())
 }

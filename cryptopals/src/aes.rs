@@ -58,22 +58,7 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error>
         decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
-    let mut pkcs7_padded = true;
-
-    let last_val = blocks[blocks.len() - 1];
-    for i in 0..last_val as usize {
-        let idx = blocks.len() - 1 - i;
-        if blocks[idx] != last_val {
-            pkcs7_padded = false;
-            break;
-        }
-    }
-
-    if pkcs7_padded {
-        blocks = blocks[..blocks.len() - last_val as usize].to_vec();
-    }
-
-    Ok(blocks)
+    remove_pkcs7_padding(&blocks)
 }
 
 pub fn detect_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
@@ -746,6 +731,25 @@ pub fn pkcs7_pad(message: &mut Vec<u8>, block_byte_length: usize) -> Result<(), 
     Ok(())
 }
 
+pub fn remove_pkcs7_padding(message: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut pkcs7_padded = true;
+
+    let last_val = message[message.len() - 1];
+    for i in 0..last_val as usize {
+        let idx = message.len() - 1 - i;
+        if message[idx] != last_val {
+            pkcs7_padded = false;
+            break;
+        }
+    }
+
+    if !pkcs7_padded {
+        return Err(Error::new(ErrorKind::InvalidData, "Not PKCS7 Padded"));
+    }
+
+    Ok(message[..message.len() - last_val as usize].to_vec())
+}
+
 #[allow(dead_code)]
 fn print_state(state: &[u8]) {
     println!();
@@ -773,5 +777,31 @@ mod tests {
         pkcs7_pad(&mut block, block_size).unwrap();
 
         assert_eq!(copy.len() + block_size, block.len());
+    }
+
+    #[test]
+    fn test_pkcs_remove_padding() {
+        let mut message = vec![0u8; 12];
+        message.extend_from_slice(&[4u8; 4]);
+
+        let res = remove_pkcs7_padding(&message);
+
+        match res {
+            Ok(r) => assert_eq!(message.len() - 4, r.len()),
+            Err(_) => assert_eq!(true, false),
+        }
+    }
+
+    #[test]
+    fn test_pkcs_remove_padding_failure() {
+        let mut message = vec![0u8; 12];
+        message.extend_from_slice(&[4u8; 2]);
+
+        let original_length = message.len();
+
+        match remove_pkcs7_padding(&message) {
+            Ok(_) => assert_eq!(true, false),
+            Err(_) => assert_eq!(original_length, message.len()),
+        };
     }
 }
