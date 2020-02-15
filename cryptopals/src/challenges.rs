@@ -235,10 +235,8 @@ pub fn challenge11() -> Result<(), Error> {
 pub fn challenge12() -> Result<(), Error> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
 
-    let oracle = aes::Oracle {
-        key: aes::generate_key(),
-        encryptor: Box::new(aes::encrypt_ecb_128),
-    };
+    let oracle = aes::Oracle::cbc();
+    use aes::Encryptor;
 
     // find block size
     let block_size = aes::find_block_length(&unknown_text, &oracle)?;
@@ -357,7 +355,9 @@ pub fn challenge14() -> Result<(), Error> {
     let oracle = aes::Oracle {
         key: aes::generate_key(),
         encryptor: Box::new(encrypt_with_rnd_prefix),
+        decryptor: Box::new(&aes::decrypt_ecb_128),
     };
+    use aes::Encryptor;
 
     let padding_cipher_block = aes::find_ecb_128_padded_block_cipher(&oracle)?;
 
@@ -453,5 +453,32 @@ pub fn challenge14() -> Result<(), Error> {
         std::str::from_utf8(&result) == std::str::from_utf8(string_to_find),
         Some("Deciphered text with random prefix"),
     );
+    Ok(())
+}
+
+pub fn challenge16() -> Result<(), Error> {
+    let oracle = aes::Oracle::cbc();
+
+    fn baconise(user_data: &str) -> String {
+        let mut res = String::from("comment1=cooking%20MCs;userdata=");
+        res.push_str(user_data);
+        let safe_data = user_data.replace(';', " ");
+        let safer_data = safe_data.replace('=', " ");
+        res.push_str(&safer_data);
+        res.push_str(";comment2=%20like%20a%20pound%20of%20bacon");
+        res
+    }
+
+    // fn encrypt_bacon(plain_text: &str, oracle: &aes::Oracle) -> Result<Vec<u8>, Error> {
+    //     aes::encrypt_cbc_128(plain_text: &[u8], key: &[u8])
+    // }
+
+    // fn decrypt_bacon(cipher_text: &[u8], oracle: &aes::Oracle) -> Result<Vec<u8>, Error> {
+    //     oracle.decrypt(cipher_text)
+    // }
+
+    // let user_data = "Hello my name is Paul";
+    // let cipher_text = encrypt_bacon(user_data, &oracle);
+
     Ok(())
 }

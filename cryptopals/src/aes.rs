@@ -4,14 +4,41 @@ pub const KNOWN_KEY: [u8; 16] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 ];
 
+pub trait Encryptor {
+    fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error>;
+    fn decrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error>;
+}
+
 pub struct Oracle {
-    pub key: Vec<u8>,
-    pub encryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
+    key: Vec<u8>,
+    encryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
+    decryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
+}
+
+impl Encryptor for Oracle {
+    fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self.encryptor)(plain_text, &self.key)
+    }
+    fn decrypt(&self, cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self.decryptor)(cipher_text, &self.key)
+    }
 }
 
 impl Oracle {
-    pub fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
-        (*self.encryptor)(plain_text, &self.key)
+    pub fn ecb() -> Self {
+        Self {
+            key: generate_key(),
+            encryptor: Box::new(&encrypt_ecb_128),
+            decryptor: Box::new(&decrypt_ecb_128),
+        }
+    }
+
+    pub fn cbc() -> Self {
+        Self {
+            key: generate_key(),
+            encryptor: Box::new(&encrypt_cbc_128),
+            decryptor: Box::new(&decrypt_cbc_128),
+        }
     }
 }
 
@@ -89,7 +116,7 @@ pub fn detect_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
     num_blocks - num_unique_blocks > 1
 }
 
-pub fn find_ecb_128_padded_block_cipher(oracle: &Oracle) -> Result<Vec<u8>, Error> {
+pub fn find_ecb_128_padded_block_cipher(oracle: impl Encryptor) -> Result<Vec<u8>, Error> {
     let padding = vec![16u8; 32 + 15];
 
     let cipher_text = oracle.encrypt(&padding)?;
@@ -111,17 +138,15 @@ pub fn find_ecb_128_padded_block_cipher(oracle: &Oracle) -> Result<Vec<u8>, Erro
 
 pub fn encrypt_cbc_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     let iv = vec![0u8; 16];
-    Ok(encrypt_cbc_128_with_iv(plain_text, key, &iv)?)
+    encrypt_cbc_128_with_iv(plain_text, key, &iv)
 }
 
-pub fn encrypt_cbc_128_with_iv(
-    cipher_text: &[u8],
-    key: &[u8],
-    iv: &[u8],
-) -> Result<Vec<u8>, Error> {
+pub fn encrypt_cbc_128_with_iv(plain_text: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>, Error> {
     let expanded_key = expand_key(key)?;
 
-    let mut blocks: Vec<u8> = cipher_text.to_vec();
+    let mut blocks: Vec<u8> = plain_text.to_vec();
+    pkcs7_pad(&mut blocks, 16)?;
+
     let mut prev_block = iv.to_vec();
 
     for idx in (0..blocks.len()).step_by(16) {
@@ -139,7 +164,7 @@ pub fn encrypt_cbc_128_with_iv(
 
 pub fn decrypt_cbc_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     let iv = vec![0u8; 16];
-    Ok(decrypt_cbc_128_with_iv(cipher_text, key, &iv)?)
+    decrypt_cbc_128_with_iv(cipher_text, key, &iv)
 }
 
 pub fn decrypt_cbc_128_with_iv(
@@ -163,6 +188,22 @@ pub fn decrypt_cbc_128_with_iv(
 
         prev_block = block.to_vec();
     }
+
+    let mut pkcs7_padded = true;
+
+    let last_val = blocks[blocks.len() - 1];
+    for i in 0..last_val as usize {
+        let idx = blocks.len() - 1 - i;
+        if blocks[idx] != last_val {
+            pkcs7_padded = false;
+            break;
+        }
+    }
+
+    if pkcs7_padded {
+        blocks = blocks[..blocks.len() - last_val as usize].to_vec();
+    }
+
     Ok(blocks)
 }
 
@@ -227,16 +268,16 @@ pub fn decryption_oracle(
 pub fn ecb_encryption_oracle(
     known_text: &[u8],
     other_text: &[u8],
-    oracle: &Oracle,
+    oracle: impl Encryptor,
 ) -> Result<Vec<u8>, Error> {
     let mut concatted = known_text.to_vec();
     concatted.extend_from_slice(other_text);
     pkcs7_pad(&mut concatted, 16)?;
 
-    Ok(oracle.encrypt(&concatted)?)
+    oracle.encrypt(&concatted)
 }
 
-pub fn find_block_length(cipher_text: &[u8], oracle: &Oracle) -> Result<usize, Error> {
+pub fn find_block_length(cipher_text: &[u8], oracle: impl Encryptor) -> Result<usize, Error> {
     let mut prev_length = 0;
     for i in 0..0xff {
         let known_text = vec![b'a'; i];
@@ -365,7 +406,7 @@ fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>, Error> {
 
     // xor with round constant rcon
     let arr2 = [RCON[rcon_idx], 0, 0, 0];
-    Ok(xor_words(&tmp, &arr2)?)
+    xor_words(&tmp, &arr2)
 }
 
 fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>, Error> {
