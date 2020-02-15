@@ -25,6 +25,7 @@ pub fn set2() -> Result<(), Error> {
     challenge12()?;
     challenge13()?;
     challenge14()?;
+    challenge16()?;
 
     Ok(())
 }
@@ -298,7 +299,9 @@ pub fn challenge12() -> Result<(), Error> {
         let num_chars_to_find = end_idx - idx;
         for char_idx in 0..num_chars_to_find {
             let input_block = vec![b'A'; 16 - char_idx - 1];
+
             oracle.set_text(&unknown_text[idx..end_idx]);
+
             let ecb_input_block_with_unkown = oracle.encrypt(&input_block)?;
             let expected_block = ecb_input_block_with_unkown[..16].to_vec();
 
@@ -480,29 +483,44 @@ pub fn challenge14() -> Result<(), Error> {
     Ok(())
 }
 
+#[allow(unused_assignments)]
 pub fn challenge16() -> Result<(), Error> {
-    let oracle = aes::Oracle::cbc();
+    fn baconise(user_data: &[u8]) -> Result<Vec<u8>, Error> {
+        let mut res = b"comment1=cooking%20MCs;userdata=".to_vec();
 
-    fn baconise(user_data: &str) -> String {
-        let mut res = String::from("comment1=cooking%20MCs;userdata=");
-        res.push_str(user_data);
-        let safe_data = user_data.replace(';', " ");
-        let safer_data = safe_data.replace('=', " ");
-        res.push_str(&safer_data);
-        res.push_str(";comment2=%20like%20a%20pound%20of%20bacon");
-        res
+        let mut safe_data = String::new();
+        match std::str::from_utf8(user_data) {
+            Ok(text) => safe_data = String::from(text),
+            Err(_) => return Err(Error::new(ErrorKind::InvalidData, "Invalid string data")),
+        };
+        safe_data = safe_data.replace(';', " ");
+        safe_data = safe_data.replace('=', " ");
+
+        res.extend_from_slice(&safe_data.as_bytes());
+        res.extend_from_slice(b";comment2=%20like%20a%20pound%20of%20bacon");
+        Ok(res)
     }
 
-    // fn encrypt_bacon(plain_text: &str, oracle: &aes::Oracle) -> Result<Vec<u8>, Error> {
-    //     aes::encrypt_cbc_128(plain_text: &[u8], key: &[u8])
-    // }
+    fn encrypt_bacon(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+        let baconised_text = baconise(plain_text)?;
+        aes::encrypt_cbc_128(&baconised_text, key)
+    }
 
-    // fn decrypt_bacon(cipher_text: &[u8], oracle: &aes::Oracle) -> Result<Vec<u8>, Error> {
-    //     oracle.decrypt(cipher_text)
-    // }
+    fn decrypt_bacon(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+        aes::decrypt_cbc_128(cipher_text, key)
+    }
 
-    // let user_data = "Hello my name is Paul";
-    // let cipher_text = encrypt_bacon(user_data, &oracle);
+    let bacon_oracle = aes::Oracle {
+        key: aes::generate_key(),
+        encryptor: Box::new(&encrypt_bacon),
+        decryptor: Box::new(&decrypt_bacon),
+    };
+    use aes::Encryptor;
+
+    let user_data = b"Hello my name is Paul";
+    let cipher_text = bacon_oracle.encrypt(&user_data[..])?;
+
+    println!("{}", Wrap(bacon_oracle.decrypt(&cipher_text)?));
 
     Ok(())
 }
