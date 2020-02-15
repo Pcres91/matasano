@@ -235,11 +235,36 @@ pub fn challenge11() -> Result<(), Error> {
 pub fn challenge12() -> Result<(), Error> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
 
-    let oracle = aes::Oracle::cbc();
+    struct ConcattorEcbOracle {
+        key: Vec<u8>,
+        text_to_append: Vec<u8>,
+    };
+
+    impl ConcattorEcbOracle {
+        pub fn set_text(&mut self, text: &[u8]) {
+            self.text_to_append = text.to_vec()
+        }
+    }
+
     use aes::Encryptor;
+    impl Encryptor for ConcattorEcbOracle {
+        fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+            let mut concatted = plain_text.to_vec();
+            concatted.extend_from_slice(&self.text_to_append);
+            aes::encrypt_ecb_128(&concatted, &self.key)
+        }
+        fn decrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+            aes::decrypt_ecb_128(plain_text, &self.key)
+        }
+    }
+
+    let mut oracle = ConcattorEcbOracle {
+        key: aes::generate_key(),
+        text_to_append: unknown_text.to_vec(),
+    };
 
     // find block size
-    let block_size = aes::find_block_length(&unknown_text, &oracle)?;
+    let block_size = aes::find_block_length(&oracle)?;
     if block_size != 16 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -248,11 +273,9 @@ pub fn challenge12() -> Result<(), Error> {
     }
 
     // find whether it's in ecb 128 mode
-    let in_ecb_mode = aes::detect_cipher_in_ecb_128_mode(&aes::ecb_encryption_oracle(
-        &vec![b'a'; block_size * 5],
-        &unknown_text,
-        &oracle,
-    )?);
+    let in_ecb_mode =
+        aes::detect_cipher_in_ecb_128_mode(&oracle.encrypt(&vec![b'a'; block_size * 5])?);
+
     if !in_ecb_mode {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -275,8 +298,8 @@ pub fn challenge12() -> Result<(), Error> {
         let num_chars_to_find = end_idx - idx;
         for char_idx in 0..num_chars_to_find {
             let input_block = vec![b'A'; 16 - char_idx - 1];
-            let ecb_input_block_with_unkown =
-                aes::ecb_encryption_oracle(&input_block, &unknown_text[idx..end_idx], &oracle)?;
+            oracle.set_text(&unknown_text[idx..end_idx]);
+            let ecb_input_block_with_unkown = oracle.encrypt(&input_block)?;
             let expected_block = ecb_input_block_with_unkown[..16].to_vec();
 
             for i in aes::SMART_ASCII.iter() {
@@ -291,7 +314,8 @@ pub fn challenge12() -> Result<(), Error> {
             }
         }
     }
-    // println!("{}", Wrap(result));
+    println!("{}", Wrap(result));
+
     print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
     Ok(())
 }

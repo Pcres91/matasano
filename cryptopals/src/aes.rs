@@ -10,18 +10,9 @@ pub trait Encryptor {
 }
 
 pub struct Oracle {
-    key: Vec<u8>,
-    encryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
-    decryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
-}
-
-impl Encryptor for Oracle {
-    fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
-        (*self.encryptor)(plain_text, &self.key)
-    }
-    fn decrypt(&self, cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
-        (*self.decryptor)(cipher_text, &self.key)
-    }
+    pub key: Vec<u8>,
+    pub encryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
+    pub decryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>, Error>>,
 }
 
 impl Oracle {
@@ -42,6 +33,15 @@ impl Oracle {
     }
 }
 
+impl Encryptor for Oracle {
+    fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self.encryptor)(plain_text, &self.key)
+    }
+    fn decrypt(&self, cipher_text: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self.decryptor)(cipher_text, &self.key)
+    }
+}
+
 pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
     if key.len() != 16 {
         return Err(Error::new(
@@ -54,6 +54,7 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> 
 
     let mut blocks: Vec<u8> = plain_text.to_vec();
     pkcs7_pad(&mut blocks, 16)?;
+
     for idx in (0..blocks.len() as usize).step_by(16) {
         encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
@@ -116,7 +117,7 @@ pub fn detect_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
     num_blocks - num_unique_blocks > 1
 }
 
-pub fn find_ecb_128_padded_block_cipher(oracle: impl Encryptor) -> Result<Vec<u8>, Error> {
+pub fn find_ecb_128_padded_block_cipher(oracle: &impl Encryptor) -> Result<Vec<u8>, Error> {
     let padding = vec![16u8; 32 + 15];
 
     let cipher_text = oracle.encrypt(&padding)?;
@@ -265,23 +266,10 @@ pub fn decryption_oracle(
     Ok(detected_ecb == in_ecb_mode)
 }
 
-pub fn ecb_encryption_oracle(
-    known_text: &[u8],
-    other_text: &[u8],
-    oracle: impl Encryptor,
-) -> Result<Vec<u8>, Error> {
-    let mut concatted = known_text.to_vec();
-    concatted.extend_from_slice(other_text);
-    pkcs7_pad(&mut concatted, 16)?;
-
-    oracle.encrypt(&concatted)
-}
-
-pub fn find_block_length(cipher_text: &[u8], oracle: impl Encryptor) -> Result<usize, Error> {
+pub fn find_block_length(oracle: &impl Encryptor) -> Result<usize, Error> {
     let mut prev_length = 0;
     for i in 0..0xff {
-        let known_text = vec![b'a'; i];
-        let new_cipher = ecb_encryption_oracle(&known_text, cipher_text, oracle)?;
+        let new_cipher = oracle.encrypt(&vec![b'a'; i])?;
 
         if prev_length == 0 {
             prev_length = new_cipher.len();
