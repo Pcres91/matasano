@@ -510,6 +510,20 @@ pub fn challenge16() -> Result<(), Error> {
         aes::decrypt_cbc_128(cipher_text, key)
     }
 
+    impl aes::Oracle {
+        pub fn find_bacon(&self, cipher_text: &[u8]) -> Result<bool, Error> {
+            let res = &self.decrypt(cipher_text)?;
+            let decrypted = std::str::from_utf8(&res);
+            let mut plain_text = String::new();
+            match decrypted {
+                Ok(text) => plain_text = String::from(text),
+                Err(_) => return Err(Error::new(ErrorKind::InvalidData, "Invalid string data")),
+            };
+
+            Ok(plain_text.contains(";admin=true;"))
+        }
+    }
+
     let bacon_oracle = aes::Oracle {
         key: aes::generate_key(),
         encryptor: Box::new(&encrypt_bacon),
@@ -521,6 +535,7 @@ pub fn challenge16() -> Result<(), Error> {
     let cipher_text = bacon_oracle.encrypt(&user_data[..])?;
 
     println!("{}", Wrap(bacon_oracle.decrypt(&cipher_text)?));
+    println!("{}", bacon_oracle.find_bacon(&cipher_text)?);
 
     Ok(())
 }
