@@ -484,7 +484,7 @@ pub fn challenge14() -> Result<(), Error> {
     Ok(())
 }
 
-// #[allow(unused_assignments)]
+#[allow(unused_assignments)]
 pub fn challenge15() -> Result<(), Error> {
     let mut message = vec![0u8; 12];
     message.extend_from_slice(&[4u8; 4]);
