@@ -31,7 +31,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, Error> {
         if byte as char == '=' {
             break;
         } else {
-            writer.write(6, decode_byte(byte).unwrap())?;
+            writer.write(6, decode_byte(byte))?;
         }
     }
 
@@ -81,31 +81,30 @@ fn encode_byte(byte: u8) -> Option<char> {
 }
 
 // decodes a char into its base64 representation. If it doesn't have one, returns None
-fn decode_byte(byte: u8) -> Option<u8> {
+fn decode_byte(byte: u8) -> u8 {
     // capitals
     if byte >= 65 && byte <= 90 {
-        Some(byte - 65)
+        byte - 65
     }
     // lowercase
     else if byte >= 97 && byte <= 122 {
-        Some(byte - 71)
+        byte - 71
     }
     // digits
     else if byte >= 48 && byte <= 57 {
-        Some(byte + 4)
+        byte + 4
     }
     // +
     else if byte as char == '+' {
-        Some(62)
+        62
     }
     // /
     else if byte as char == '/' {
-        Some(63)
+        63
     }
     // padding returns none
     else {
-        println!("Gonna panic on char {}: {}", byte as char, byte);
-        None
+        panic!("Gonna panic on char {}: {}", byte as char, byte)
     }
 }
 
