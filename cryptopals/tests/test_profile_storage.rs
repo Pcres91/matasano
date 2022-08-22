@@ -9,6 +9,7 @@ fn test_adding_a_profile() {
         let out = profile_for("test@tester.com").unwrap();
         PROFILE_STORAGE.add_from_hash(&out).unwrap();
         assert_eq!(PROFILE_STORAGE.profiles.len(), 1);
+
         let user_prof = &PROFILE_STORAGE.profiles[0];
         assert_eq!(user_prof.email, "test@tester.com");
         assert_eq!(user_prof.uid, 0);

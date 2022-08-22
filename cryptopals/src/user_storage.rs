@@ -1,5 +1,19 @@
 use crate::aes;
-use std::io::{Error, ErrorKind};
+use std::error;
+use std::fmt;
+
+type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+
+#[derive(Debug, Clone)]
+struct InvalidEmail;
+
+impl fmt::Display for InvalidEmail {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid first item to double")
+    }
+}
+
+impl error::Error for InvalidEmail {}
 
 pub static mut PROFILE_STORAGE: ProfileStorage = ProfileStorage {
     profiles: Vec::new(),
@@ -21,7 +35,7 @@ impl ProfileStorage {
         }
     }
 
-    pub fn add_from_hash(&mut self, hash: &[u8]) -> Result<(), Error> {
+    pub fn add_from_hash(&mut self, hash: &[u8]) -> Result<()> {
         let cookie = aes::decrypt_ecb_128(hash, &RND_KEY)?;
 
         self.profiles
@@ -46,7 +60,7 @@ pub struct Profile {
     pub hash: Vec<u8>,
 }
 
-pub fn parse_cookie(cookie: &str) -> Result<Profile, Error> {
+pub fn parse_cookie(cookie: &str) -> Result<Profile> {
     let tokens: Vec<&str> = cookie.split(&['=', '&'][..]).collect();
 
     // @TODO: change these all to return Error
@@ -74,12 +88,9 @@ pub fn parse_cookie(cookie: &str) -> Result<Profile, Error> {
 }
 
 /// # Safety
-pub unsafe fn profile_for(email: &str) -> Result<Vec<u8>, Error> {
+pub unsafe fn profile_for(email: &str) -> Result<Vec<u8>> {
     if email.contains('&') || email.contains('=') {
-        return Err(Error::new(
-            ErrorKind::InvalidInput,
-            "Can't contain metacharacters in email",
-        ));
+        return Err(InvalidEmail.into());
     }
 
     let output = format!(
@@ -100,5 +111,8 @@ pub unsafe fn profile_for(email: &str) -> Result<Vec<u8>, Error> {
     // PROFILE_STORAGE.profiles.push(new_profile.clone());
     // NEXT_UID += 1;
 
-    Ok(aes::encrypt_ecb_128(&output[..].as_bytes(), &RND_KEY)?)
+    match aes::encrypt_ecb_128(&output[..].as_bytes(), &RND_KEY) {
+        Ok(res) => Ok(res),
+        Err(error) => Err(error.into()),
+    }
 }

@@ -1,12 +1,16 @@
 #![allow(dead_code)]
-use std::io::Error;
-
 use crypto::challenges::*;
 
-fn main() -> Result<(), Error> {
-    set1()?;
+fn main() {
+    // match set1() {
+    //     Ok(_) => (),
+    //     Err(_) => println!("Errored in set1"),
+    // }
 
-    set2()?;
+    // match set2() {
+    //     Ok(_) => (),
+    //     Err(_) => println!("Errored in set2"),
+    // }
 
-    Ok(())
+    challenge7().expect("Didn't succeed");
 }

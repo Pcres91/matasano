@@ -1,14 +1,25 @@
+use bitstream_io::{BigEndian, BitReader, BitWriter};
 use std::collections::BTreeMap;
-use std::io::{Cursor, Error};
-use std::result::Result;
+use std::error;
+use std::fmt;
+use std::io;
+use std::io::Cursor;
 
-extern crate num_bigint as bigint;
+extern crate hex;
 extern crate num_traits;
 
-use bigint::BigUint;
-use bitstream_io::{BigEndian, BitReader, BitWriter};
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-use std::fmt;
+#[derive(Debug, Clone)]
+pub struct InvalidData;
+
+impl fmt::Display for InvalidData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid first item to double")
+    }
+}
+
+impl error::Error for InvalidData {}
 
 pub struct Wrap(pub Vec<u8>);
 
@@ -21,25 +32,27 @@ impl fmt::Display for Wrap {
     }
 }
 
-pub fn hex_decode_string(string: &str) -> Vec<u8> {
-    hex_decode_bytes(string.as_bytes())
+/// converts a string of hex into bytes
+/// ie, "08af" -> vec![0x0, 0x8, 0xa, 0xf]
+pub fn hex_decode_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
+    match hex::decode(bytes) {
+        Ok(res) => Ok(res),
+        Err(hexError) => Err(hexError.into()),
+    }
 }
 
-// converts the ascii chars for strings into their hex equivalents.
-// eg: "abcd" -> vec![11, 12, 13, 14]
-pub fn hex_decode_bytes(bytes: &[u8]) -> Vec<u8> {
-    let n = BigUint::parse_bytes(bytes, 16).unwrap();
-    n.to_bytes_be()
-}
+pub fn xor_bytes(left: &[u8], right: &[u8]) -> Result<Vec<u8>> {
+    if left.len() != right.len() {
+        return Err(InvalidData.into());
+    }
 
-pub fn xor_bytes(left: &[u8], right: &[u8]) -> Vec<u8> {
     let mut res: Vec<u8> = Vec::new();
 
     for i in 0..left.len() {
         res.push(left[i] ^ right[i]);
     }
 
-    res
+    Ok(res)
 }
 
 // performs a per-bit operation using bitstreams.Bit of overkill
@@ -136,6 +149,7 @@ pub fn find_single_char_key(cipher: &[u8]) -> u8 {
 pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     let mut idx = 0;
     let mut cipher: Vec<u8> = vec![];
+
     for val in text {
         cipher.push(val ^ key[idx]);
 
@@ -148,7 +162,10 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     cipher
 }
 
-pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize, Error> {
+pub fn hamming_distance(
+    string_1: &[u8],
+    string_2: &[u8],
+) -> core::result::Result<usize, io::Error> {
     let mut cur1 = Cursor::new(&string_1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
     let mut cur2 = Cursor::new(&string_2);
@@ -165,11 +182,7 @@ pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize, Error
     Ok(distance)
 }
 
-pub fn get_average_distance(
-    data: &[u8],
-    key_length: usize,
-    num_blocks: usize,
-) -> Result<f32, Error> {
+pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -> Result<f32> {
     let mut sum_distances = 0usize;
     for i in 0..num_blocks {
         let idx = i * key_length;
@@ -184,11 +197,7 @@ pub fn get_average_distance(
     Ok(average_distance)
 }
 
-pub fn find_key_size(
-    data: &[u8],
-    key_range: (usize, usize),
-    num_blocks: usize,
-) -> Result<usize, Error> {
+pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) -> Result<usize> {
     let mut distances: Vec<(f32, usize)> = vec![];
 
     for key_length in key_range.0..=key_range.1 {

@@ -3,14 +3,17 @@ use crate::base64;
 use crate::common;
 use crate::user_storage;
 use common::Wrap;
-use std::io::{Error, ErrorKind};
+use std::error;
+use std::fmt;
 
-pub fn set1() -> Result<(), Error> {
-    challenge1();
-    challenge2();
-    challenge3();
+type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+
+pub fn set1() -> Result<()> {
+    challenge1()?;
+    challenge2()?;
+    challenge3()?;
     challenge4()?;
-    challenge5();
+    challenge5()?;
     challenge6()?;
     challenge7()?;
     challenge8()?;
@@ -18,7 +21,7 @@ pub fn set1() -> Result<(), Error> {
     Ok(())
 }
 
-pub fn set2() -> Result<(), Error> {
+pub fn set2() -> Result<()> {
     challenge9()?;
     challenge10()?;
     challenge11()?;
@@ -31,88 +34,122 @@ pub fn set2() -> Result<(), Error> {
     Ok(())
 }
 
-fn print_challenge_result(challenge_num: u32, success: bool, message: Option<&str>) {
+#[derive(Debug, Clone)]
+pub struct ExpectationFailure;
+
+impl fmt::Display for ExpectationFailure {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid first item to double")
+    }
+}
+
+impl error::Error for ExpectationFailure {}
+
+fn expect_eq<T>(expected: T, actual: T) -> Result<()>
+where
+    T: std::cmp::Eq,
+{
+    match expected == actual {
+        true => Ok(()),
+        false => Err(ExpectationFailure.into()),
+    }
+}
+
+fn expect_true(expected: bool) -> Result<()> {
+    match expected {
+        true => Ok(()),
+        false => Err(ExpectationFailure.into()),
+    }
+}
+
+fn expect_false(expected: bool) -> Result<()> {
+    expect_true(!expected)
+}
+
+fn print_challenge_result(challenge_num: u32, success: Result<()>, message: Option<&str>) {
     let mut msg = String::new();
     if let Some(m) = message {
         msg = ": ".to_string() + m
     }
 
-    if success {
-        println!("SUCCESSFUL: Challenge {}{}", challenge_num, msg)
-    } else {
-        println!("FAILED: Challenge {}", challenge_num)
+    match success {
+        Ok(_) => println!("SUCCESSFUL: Challenge {}{}", challenge_num, msg),
+        Err(_) => println!("FAILED: Challenge {}", challenge_num),
     }
 }
 
-pub fn challenge1() {
+pub fn challenge1() -> Result<()> {
     use common::hex_decode_bytes;
-    let n = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
-    let bytes = hex_decode_bytes(n); // vec![0x49, 0x27, 0x6d, 0x20, ...]
+
+    let hex_values_as_string = b"T49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
+    let exp_encoding =
+        "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
+
+    let bytes = hex_decode_bytes(hex_values_as_string)?;
 
     let encoded = base64::pretty_print(&bytes);
 
-    let expected_result =
-        "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
-
-    print_challenge_result(1, encoded == expected_result, None)
+    expect_eq(exp_encoding, encoded)
 }
 
-pub fn challenge2() {
+pub fn challenge2() -> Result<()> {
     use common::{hex_decode_bytes, xor_bytes};
-    let a = hex_decode_bytes(b"1c0111001f010100061a024b53535009181c");
 
-    let b = hex_decode_bytes(b"686974207468652062756c6c277320657965");
+    let a = hex_decode_bytes(b"1c0111001f010100061a024b53535009181c")?;
+    let b = hex_decode_bytes(b"686974207468652062756c6c277320657965")?;
 
-    let result = xor_bytes(&a, &b);
+    let result = xor_bytes(&a, &b)?;
 
-    let expected_result = hex_decode_bytes(b"746865206b696420646f6e277420706c6179");
+    let expected_result = hex_decode_bytes(b"746865206b696420646f6e277420706c6179")?;
 
-    print_challenge_result(2, result == expected_result, None);
+    expect_eq(expected_result, result)
 }
 
-pub fn challenge3() {
+pub fn challenge3() -> Result<()> {
     use common::{find_single_char_key, hex_decode_bytes, single_byte_xor};
+
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher =
-        hex_decode_bytes(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
+        hex_decode_bytes(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")?;
+
     // let expected_result = "I'm killing your brain like a poisonous mushroom".to_string();
     // let cipher = hex_decode_bytes(b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec());
 
     let key = find_single_char_key(&cipher);
 
-    let result = Wrap(single_byte_xor(&cipher, key)).to_string();
+    let result = std::str::from_utf8(&single_byte_xor(&cipher, key))?;
 
-    print_challenge_result(3, result == expected_result, None);
+    expect_eq(expected_result, result)
 }
 
-pub fn challenge4() -> Result<(), Error> {
+pub fn challenge4() -> Result<()> {
     use common::{
-        find_single_char_key, get_common_letter_frequencies, hex_decode_string, single_byte_xor,
+        find_single_char_key, get_common_letter_frequencies, hex_decode_bytes, single_byte_xor,
     };
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
 
-    let file = File::open("4.txt").unwrap();
+    let file = File::open("4.txt")?;
     let reader = BufReader::new(file);
 
-    let mut found_message: (i32, u8, Vec<u8>, usize) = (0, 0, vec![], 0);
+    let mut found_message: (i32, u8, &str, usize) = (0, 0, "", 0);
     for (line_num, line) in reader.lines().enumerate() {
-        let bytes = hex_decode_string(&line?);
+        let bytes = hex_decode_bytes(line?.as_bytes())?;
         let key = find_single_char_key(&bytes);
-        let msg = single_byte_xor(&bytes, key);
-        let freq_count = get_common_letter_frequencies(&msg);
+        let msg = std::str::from_utf8(&single_byte_xor(&bytes, key))?;
+
+        let freq_count = get_common_letter_frequencies(msg.as_bytes());
+
         if freq_count > found_message.0 {
             found_message = (freq_count, key, msg, line_num);
         }
     }
 
-    let result = format!("line {}: {}", found_message.3, &Wrap(found_message.2));
-    print_challenge_result(4, true, Some(&result));
-
-    Ok(())
+    expect_eq(170, found_message.3);
+    expect_eq("Now that the party is jumping", found_message.2)
 }
 
-pub fn challenge5() {
+pub fn challenge5() -> Result<()> {
     let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
     let key = b"ICE";
 
@@ -120,13 +157,13 @@ pub fn challenge5() {
     let cipher = repeated_xor(plain_text, key);
 
     use common::hex_decode_bytes;
-    let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f");
+    let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f")?;
 
-    print_challenge_result(5, cipher == expected_result, None);
+    expect_eq(expected_result, cipher)
 }
 
-pub fn challenge6() -> Result<(), Error> {
-    use common::{find_key_size, find_single_char_key, slice_by_byte};
+pub fn challenge6() -> Result<()> {
+    use common::{find_key_size, find_single_char_key, repeated_xor, slice_by_byte};
 
     let cipher = base64::read_encoded_file("6.txt")?;
 
@@ -139,65 +176,59 @@ pub fn challenge6() -> Result<(), Error> {
         .map(|x| find_single_char_key(x))
         .collect();
 
-    let _result = Wrap(common::repeated_xor(&cipher, &key)).to_string();
-    print_challenge_result(6, true, Some(&Wrap(key).to_string()));
+    let result = std::str::from_utf8(repeated_xor(&cipher, &key))?;
 
-    Ok(())
+    expect_eq("Terminator X: Bring the noise", result)
 }
 
-pub fn challenge7() -> Result<(), Error> {
-    let cipher = base64::read_encoded_file("7.txt").unwrap();
+pub fn challenge7() -> Result<()> {
+    let cipher = base64::read_encoded_file("7.txt")?;
 
     let key = b"YELLOW SUBMARINE";
 
-    let _plain_text = aes::decrypt_ecb_128(&cipher, key)?;
+    let plain_text_as_bytes = aes::decrypt_ecb_128(&cipher, key)?;
 
-    // println!("{}", Wrap(_plain_text));
+    let _plain_text = std::str::from_utf8(&plain_text_as_bytes)?;
 
-    print_challenge_result(7, true, Some("Implementing aes-ecb-128"));
+    println!("{}", _plain_text);
+
     Ok(())
 }
 
-pub fn challenge8() -> Result<(), Error> {
+pub fn challenge8() -> Result<()> {
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
 
-    let file = File::open("8.txt").unwrap();
+    let file = File::open("8.txt")?;
     let reader = BufReader::new(file);
 
     let mut lines_in_ecb_mode: Vec<usize> = Vec::new();
 
     for (line_num, line) in reader.lines().enumerate() {
-        let cipher_text = common::hex_decode_string(&line?);
+        let cipher_text = common::hex_decode_bytes(line?.as_bytes())?;
 
-        let ecb_mode = aes::detect_cipher_in_ecb_128_mode(&cipher_text);
+        let ecb_mode = aes::is_cipher_in_ecb_128_mode(&cipher_text);
 
         if ecb_mode {
             lines_in_ecb_mode.push(line_num);
         }
     }
 
-    print_challenge_result(
-        8,
-        !lines_in_ecb_mode.is_empty(),
-        Some("detecting aes-ecb-128"),
-    );
-
-    Ok(())
+    expect_false(lines_in_ecb_mode.is_empty())
 }
 
-pub fn challenge9() -> Result<(), Error> {
+pub fn challenge9() -> Result<()> {
     let mut msg = b"YELLO".to_vec();
     let key_len = 16;
 
     aes::pkcs7_pad(&mut msg, key_len)?;
 
     // println!("{:2x?}", msg);
-    print_challenge_result(9, true, Some("Implementing pkcs#7 padding"));
+    // print_challenge_result(9, true, Some("Implementing pkcs#7 padding"));
     Ok(())
 }
 
-pub fn challenge10() -> Result<(), Error> {
+pub fn challenge10() -> Result<()> {
     let cipher_text = base64::read_encoded_file("10.txt")?;
     let key = b"YELLOW SUBMARINE";
 
@@ -207,16 +238,16 @@ pub fn challenge10() -> Result<(), Error> {
 
     let cipher_again = aes::encrypt_cbc_128(&plain_text, key)?;
 
-    print_challenge_result(
-        10,
-        cipher_text == cipher_again,
-        Some("Implementing aes-cbc-128"),
-    );
+    // print_challenge_result(
+    //     10,
+    //     cipher_text == cipher_again,
+    //     Some("Implementing aes-cbc-128"),
+    // );
 
     Ok(())
 }
 
-pub fn challenge11() -> Result<(), Error> {
+pub fn challenge11() -> Result<()> {
     let num_tests = 1000;
     let mut successful_detections = 0;
     for _ in 0..num_tests {
@@ -225,22 +256,22 @@ pub fn challenge11() -> Result<(), Error> {
         }
     }
 
-    print_challenge_result(
-        11,
-        num_tests == successful_detections,
-        Some("Detecting aes-ecb-128 with pkcs padding and random data"),
-    );
+    // print_challenge_result(
+    //     11,
+    //     num_tests == successful_detections,
+    //     Some("Detecting aes-ecb-128 with pkcs padding and random data"),
+    // );
 
     Ok(())
 }
 
-pub fn challenge12() -> Result<(), Error> {
+pub fn challenge12() -> Result<()> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
 
     struct ConcattorEcbOracle {
         key: Vec<u8>,
         text_to_append: Vec<u8>,
-    };
+    }
 
     impl ConcattorEcbOracle {
         pub fn set_text(&mut self, text: &[u8]) {
@@ -250,12 +281,12 @@ pub fn challenge12() -> Result<(), Error> {
 
     use aes::Encryptor;
     impl Encryptor for ConcattorEcbOracle {
-        fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+        fn encrypt(&self, plain_text: &[u8]) -> aes::Result<Vec<u8>> {
             let mut concatted = plain_text.to_vec();
             concatted.extend_from_slice(&self.text_to_append);
             aes::encrypt_ecb_128(&concatted, &self.key)
         }
-        fn decrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>, Error> {
+        fn decrypt(&self, plain_text: &[u8]) -> aes::Result<Vec<u8>> {
             aes::decrypt_ecb_128(plain_text, &self.key)
         }
     }
@@ -268,21 +299,22 @@ pub fn challenge12() -> Result<(), Error> {
     // find block size
     let block_size = aes::find_block_length(&oracle)?;
     if block_size != 16 {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Breaking aes-ecb-128: Block size not found to be size 16.",
-        ));
+        return Err(aes::AesError {
+            kind: aes::ErrorKind::InvalidData,
+            message: Some("Breaking aes-ecb-128: Block size not found to be size 16.".to_string()),
+        }
+        .into());
     }
 
     // find whether it's in ecb 128 mode
-    let in_ecb_mode =
-        aes::detect_cipher_in_ecb_128_mode(&oracle.encrypt(&vec![b'a'; block_size * 5])?);
+    let in_ecb_mode = aes::is_cipher_in_ecb_128_mode(&oracle.encrypt(&vec![b'a'; block_size * 5])?);
 
     if !in_ecb_mode {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Could not assert that the data is aes-ecb-128 encrypted",
-        ));
+        return Err(aes::AesError {
+            kind: aes::ErrorKind::InvalidData,
+            message: Some("Could not assert that the data is aes-ecb-128 encrypted".to_string()),
+        }
+        .into());
     }
 
     // decrypt the text
@@ -320,11 +352,11 @@ pub fn challenge12() -> Result<(), Error> {
     }
     println!("{}", Wrap(result));
 
-    print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
+    // print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
     Ok(())
 }
 
-pub fn challenge13() -> Result<(), Error> {
+pub fn challenge13() -> Result<()> {
     use user_storage::*;
 
     unsafe {
@@ -360,20 +392,20 @@ pub fn challenge13() -> Result<(), Error> {
         payload_cipher.extend_from_slice(&cipher_text[32..48]);
         PROFILE_STORAGE.add_from_hash(&payload_cipher)?;
 
-        print_challenge_result(
-            13,
-            PROFILE_STORAGE.profiles.len() == 1,
-            Some("Sent payload without knowing key"),
-        );
+        // print_challenge_result(
+        //     13,
+        //     PROFILE_STORAGE.profiles.len() == 1,
+        //     Some("Sent payload without knowing key"),
+        // );
     }
 
     Ok(())
 }
 
-pub fn challenge14() -> Result<(), Error> {
+pub fn challenge14() -> Result<()> {
     let string_to_find = b"Let's see if we can decipher this";
 
-    let encrypt_with_rnd_prefix = |plain_text: &[u8], key: &[u8]| -> Result<Vec<u8>, Error> {
+    let encrypt_with_rnd_prefix = |plain_text: &[u8], key: &[u8]| -> aes::Result<Vec<u8>> {
         use common::prefix_with_rnd_bytes;
         let rnd_bytes_range = (0, 50);
         let text = prefix_with_rnd_bytes(rnd_bytes_range, &plain_text);
@@ -476,30 +508,24 @@ pub fn challenge14() -> Result<(), Error> {
         );
     }
 
-    print_challenge_result(
-        14,
-        std::str::from_utf8(&result) == std::str::from_utf8(string_to_find),
-        Some("Deciphered text with random prefix"),
-    );
+    // print_challenge_result(
+    //     14,
+    //     std::str::from_utf8(&result) == std::str::from_utf8(string_to_find),
+    //     Some("Deciphered text with random prefix"),
+    // );
     Ok(())
 }
 
 #[allow(unused_assignments)]
-pub fn challenge15() -> Result<(), Error> {
+pub fn challenge15() -> Result<()> {
     let mut message = vec![0u8; 12];
     message.extend_from_slice(&[4u8; 4]);
 
-    let mut challenge_success = true;
+    let res = aes::remove_pkcs7_padding(&message)?;
 
-    let res = aes::remove_pkcs7_padding(&message);
-
-    match res {
-        Ok(r) => {
-            challenge_success = message.len() - 4 == r.len();
-        }
-        Err(_) => {
-            challenge_success = false;
-        }
+    match expect_eq(message.len() - 4, res.len()) {
+        Ok(()) => (),
+        Err(err) => return Err(err),
     }
 
     let mut message2 = vec![0u8; 12];
@@ -508,27 +534,20 @@ pub fn challenge15() -> Result<(), Error> {
     let original_length2 = message2.len();
 
     match aes::remove_pkcs7_padding(&message2) {
-        Ok(_) => {
-            challenge_success = false;
-        }
-        Err(_) => {
-            challenge_success = original_length2 == message2.len();
-        }
-    };
+        Ok(_) => Err(ExpectationFailure.into()),
+        Err(_) => expect_eq(original_length2, message2.len()),
+    }
 
-    print_challenge_result(15, challenge_success, Some("Function to remove padding"));
-
-    Ok(())
+    // print_challenge_result(15, challenge_success, Some("Testing Function to remove padding"));
 }
 
-pub fn challenge16() -> Result<(), Error> {
-    fn baconise(user_data: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn challenge16() -> Result<()> {
+    fn baconise(user_data: &[u8]) -> aes::Result<Vec<u8>> {
         let mut res = b"comment1=cooking%20MCs;userdata=".to_vec();
 
-        let mut safe_data = String::new();
-        match std::str::from_utf8(user_data) {
-            Ok(text) => safe_data = String::from(text),
-            Err(_) => return Err(Error::new(ErrorKind::InvalidData, "Invalid string data")),
+        let mut safe_data = match std::str::from_utf8(user_data) {
+            Ok(text) => String::from(text),
+            Err(_) => return Err(aes::AesError::new(aes::ErrorKind::InvalidData)),
         };
         safe_data = safe_data.replace(';', " ");
         safe_data = safe_data.replace('=', " ");
@@ -538,23 +557,22 @@ pub fn challenge16() -> Result<(), Error> {
         Ok(res)
     }
 
-    fn encrypt_bacon(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+    fn encrypt_bacon(plain_text: &[u8], key: &[u8]) -> aes::Result<Vec<u8>> {
         let baconised_text = baconise(plain_text)?;
         aes::encrypt_cbc_128(&baconised_text, key)
     }
 
-    fn decrypt_bacon(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>, Error> {
+    fn decrypt_bacon(cipher_text: &[u8], key: &[u8]) -> aes::Result<Vec<u8>> {
         aes::decrypt_cbc_128(cipher_text, key)
     }
 
     impl aes::Oracle {
-        pub fn find_bacon(&self, cipher_text: &[u8]) -> Result<bool, Error> {
+        pub fn find_bacon(&self, cipher_text: &[u8]) -> aes::Result<bool> {
             let res = &self.decrypt(cipher_text)?;
             let decrypted = std::str::from_utf8(&res);
-            let mut plain_text = String::new();
-            match decrypted {
-                Ok(text) => plain_text = String::from(text),
-                Err(_) => return Err(Error::new(ErrorKind::InvalidData, "Invalid string data")),
+            let plain_text = match decrypted {
+                Ok(text) => String::from(text),
+                Err(_) => return Err(aes::AesError::new(aes::ErrorKind::InvalidData)),
             };
 
             Ok(plain_text.contains(";admin=true;"))
