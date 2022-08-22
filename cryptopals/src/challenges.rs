@@ -39,7 +39,7 @@ pub struct ExpectationFailure;
 
 impl fmt::Display for ExpectationFailure {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid first item to double")
+        write!(f, "Expectation was not met")
     }
 }
 
@@ -141,7 +141,7 @@ pub fn challenge4() -> Result<()> {
     }
 
     let mut found_message: Option<Message> = None;
-    
+
     for (line_num, line) in reader.lines().enumerate() {
         let bytes = hex_decode_bytes(line?.as_bytes())?;
         let key = find_single_char_key(&bytes);
@@ -213,9 +213,9 @@ pub fn challenge7() -> Result<()> {
 
     let _plain_text = std::str::from_utf8(&plain_text_as_bytes)?;
 
-    println!("{}", _plain_text);
+    // println!("{_plain_text}");
 
-    Ok(())
+    expect_eq("hi", _plain_text)
 }
 
 pub fn challenge8() -> Result<()> {
