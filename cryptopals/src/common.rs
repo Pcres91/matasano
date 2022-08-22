@@ -37,7 +37,7 @@ impl fmt::Display for Wrap {
 pub fn hex_decode_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
     match hex::decode(bytes) {
         Ok(res) => Ok(res),
-        Err(hexError) => Err(hexError.into()),
+        Err(hex_error) => Err(hex_error.into()),
     }
 }
 

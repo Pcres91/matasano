@@ -117,7 +117,8 @@ pub fn challenge3() -> Result<()> {
 
     let key = find_single_char_key(&cipher);
 
-    let result = std::str::from_utf8(&single_byte_xor(&cipher, key))?;
+    let tmp = single_byte_xor(&cipher, key);
+    let result = std::str::from_utf8(&tmp)?;
 
     expect_eq(expected_result, result)
 }
@@ -132,21 +133,42 @@ pub fn challenge4() -> Result<()> {
     let file = File::open("4.txt")?;
     let reader = BufReader::new(file);
 
-    let mut found_message: (i32, u8, &str, usize) = (0, 0, "", 0);
+    struct Message {
+        frequency_count: i32,
+        character_key: u8,
+        message: String,
+        line_number: usize
+    }
+
+    let mut found_message: Option<Message> = None;
+    
     for (line_num, line) in reader.lines().enumerate() {
         let bytes = hex_decode_bytes(line?.as_bytes())?;
         let key = find_single_char_key(&bytes);
-        let msg = std::str::from_utf8(&single_byte_xor(&bytes, key))?;
+
+        let tmp = single_byte_xor(&bytes, key);
+        let msg = String::from_utf8(tmp)?;
 
         let freq_count = get_common_letter_frequencies(msg.as_bytes());
 
-        if freq_count > found_message.0 {
-            found_message = (freq_count, key, msg, line_num);
+        match &found_message {
+            Some(x) => {
+                if freq_count > x.frequency_count {
+                    found_message = Some(Message { frequency_count: freq_count, character_key: key, message: msg, line_number: line_num});
+                }
+            }
+            None => found_message = Some(Message { frequency_count: freq_count, character_key: key, message: msg, line_number: line_num})
         }
     }
 
-    expect_eq(170, found_message.3);
-    expect_eq("Now that the party is jumping", found_message.2)
+    match found_message {
+        None => expect_true(false),
+        Some(x) => {
+            expect_eq(170, x.line_number)?;
+            expect_eq("Now that the party is jumping", &x.message)
+        }
+    }
+
 }
 
 pub fn challenge5() -> Result<()> {
@@ -176,7 +198,8 @@ pub fn challenge6() -> Result<()> {
         .map(|x| find_single_char_key(x))
         .collect();
 
-    let result = std::str::from_utf8(repeated_xor(&cipher, &key))?;
+    let tmp = repeated_xor(&cipher, &key);
+    let result = std::str::from_utf8(&tmp)?;
 
     expect_eq("Terminator X: Bring the noise", result)
 }
