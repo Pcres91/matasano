@@ -4,11 +4,11 @@ use std::io::{Cursor, Error};
 extern crate num_bigint as bigint;
 use bigint::BigUint;
 
-pub fn pretty_print(bytes: &[u8]) -> String {
-    encode(bytes).into_iter().collect()
+pub fn pretty_print(bytes: &[u8]) -> Result<String, Error> {
+    Ok(encode(bytes)?.into_iter().collect())
 }
 
-pub fn encode(bytes: &[u8]) -> Vec<char> {
+pub fn encode(bytes: &[u8]) -> Result<Vec<char>, Error> {
     let num_bits = bytes.len() * 8;
     let num_chars = num_bits / 6;
 
@@ -17,11 +17,11 @@ pub fn encode(bytes: &[u8]) -> Vec<char> {
     let mut encoded = vec![];
     for _i in 0..num_chars {
         // must be a better way to loop through the length of reader.
-        let c = encode_byte(reader.read::<u8>(6).unwrap()).unwrap();
+        let c = encode_byte(reader.read::<u8>(6)?)?;
         encoded.push(c);
     }
 
-    encoded
+    Ok(encoded)
 }
 
 pub fn decode(data: &[u8]) -> Result<Vec<u8>, Error> {
@@ -31,7 +31,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, Error> {
         if byte as char == '=' {
             break;
         } else {
-            writer.write(6, decode_byte(byte))?;
+            writer.write(6, decode_byte(byte)?)?;
         }
     }
 
@@ -58,53 +58,53 @@ pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>, Error> {
 }
 
 // this converts u8 to base64. If topmost bits aren't 00, returns None
-fn encode_byte(byte: u8) -> Option<char> {
+fn encode_byte(byte: u8) -> Result<char, Error> {
     if byte > 63 {
-        return None;
+        return Err(Error::new(std::io::ErrorKind::InvalidData, "Byte to encode as base64 out of range"));
     }
     // capitals
     if byte <= 25 {
-        Some((0x41 + byte) as char)
+        Ok((0x41 + byte) as char)
     }
     // lowercase
     else if byte <= 51 {
-        Some((0x61 - 26 + byte) as char)
+        Ok((0x61 - 26 + byte) as char)
     }
     //digits
     else if byte <= 61 {
-        Some((0x30 + byte - 52) as char)
+        Ok((0x30 + byte - 52) as char)
     } else if byte == 62 {
-        Some('+')
+        Ok('+')
     } else {
-        Some('/')
+        Ok('/')
     }
 }
 
 // decodes a char into its base64 representation. If it doesn't have one, returns None
-fn decode_byte(byte: u8) -> u8 {
+fn decode_byte(byte: u8) -> Result<u8, Error> {
     // capitals
     if byte >= 65 && byte <= 90 {
-        byte - 65
+        Ok(byte - 65)
     }
     // lowercase
     else if byte >= 97 && byte <= 122 {
-        byte - 71
+        Ok(byte - 71)
     }
     // digits
     else if byte >= 48 && byte <= 57 {
-        byte + 4
+        Ok(byte + 4)
     }
     // +
     else if byte as char == '+' {
-        62
+        Ok(62)
     }
     // /
     else if byte as char == '/' {
-        63
+        Ok(63)
     }
     // padding returns none
     else {
-        panic!("Gonna panic on char {}: {}", byte as char, byte)
+        Err(Error::new(std::io::ErrorKind::InvalidData, "Byte to decode from base64 out of range"))
     }
 }
 

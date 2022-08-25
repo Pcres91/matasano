@@ -3,91 +3,50 @@ use crate::base64;
 use crate::common;
 use crate::user_storage;
 use common::Wrap;
-use std::error;
-use std::fmt;
+use crate::expectations::*;
 
-type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
-
-pub fn set1() -> Result<()> {
-    challenge1()?;
-    challenge2()?;
-    challenge3()?;
-    challenge4()?;
-    challenge5()?;
-    challenge6()?;
-    challenge7()?;
-    challenge8()?;
-
-    Ok(())
+pub fn set1() {
+    print_challenge_result(1, &challenge1);
+    print_challenge_result(2, &challenge2);
+    print_challenge_result(3, &challenge3);
+    print_challenge_result(4, &challenge4);
+    print_challenge_result(5, &challenge5);
+    print_challenge_result(6, &challenge6);
+    print_challenge_result(7, &challenge7);
+    print_challenge_result(8, &challenge8);
 }
 
-pub fn set2() -> Result<()> {
-    challenge9()?;
-    challenge10()?;
-    challenge11()?;
-    challenge12()?;
-    challenge13()?;
-    challenge14()?;
-    challenge15()?;
-    challenge16()?;
-
-    Ok(())
+pub fn set2() {
+    print_challenge_result(9, &challenge9);
+    print_challenge_result(10, &challenge10);
+    print_challenge_result(11, &challenge11);
+    print_challenge_result(12, &challenge12);
+    print_challenge_result(13, &challenge13);
+    print_challenge_result(14, &challenge14);
+    print_challenge_result(15, &challenge15);
+    print_challenge_result(16, &challenge16);
 }
 
-#[derive(Debug, Clone)]
-pub struct ExpectationFailure;
+fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Result<()>) {
 
-impl fmt::Display for ExpectationFailure {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Expectation was not met")
-    }
-}
-
-impl error::Error for ExpectationFailure {}
-
-fn expect_eq<T>(expected: T, actual: T) -> Result<()>
-where
-    T: std::cmp::Eq,
-{
-    match expected == actual {
-        true => Ok(()),
-        false => Err(ExpectationFailure.into()),
-    }
-}
-
-fn expect_true(expected: bool) -> Result<()> {
-    match expected {
-        true => Ok(()),
-        false => Err(ExpectationFailure.into()),
-    }
-}
-
-fn expect_false(expected: bool) -> Result<()> {
-    expect_true(!expected)
-}
-
-fn print_challenge_result(challenge_num: u32, success: Result<()>, message: Option<&str>) {
-    let mut msg = String::new();
-    if let Some(m) = message {
-        msg = ": ".to_string() + m
-    }
-
-    match success {
-        Ok(_) => println!("SUCCESSFUL: Challenge {}{}", challenge_num, msg),
-        Err(_) => println!("FAILED: Challenge {}", challenge_num),
+    match challenge() {
+        Ok(_) => println!("SUCCESSFUL: Challenge {challenge_number}"),
+        Err(error) => {
+            println!("FAILED:     Challenge {challenge_number}, {error}");
+        },
     }
 }
 
 pub fn challenge1() -> Result<()> {
     use common::hex_decode_bytes;
 
-    let hex_values_as_string = b"T49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
+    let hex_values_as_string = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let exp_encoding =
         "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
 
     let bytes = hex_decode_bytes(hex_values_as_string)?;
 
-    let encoded = base64::pretty_print(&bytes);
+    let encoded = base64::pretty_print(&bytes)?;
 
     expect_eq(exp_encoding, encoded)
 }
@@ -135,7 +94,6 @@ pub fn challenge4() -> Result<()> {
 
     struct Message {
         frequency_count: i32,
-        character_key: u8,
         message: String,
         line_number: usize
     }
@@ -154,10 +112,10 @@ pub fn challenge4() -> Result<()> {
         match &found_message {
             Some(x) => {
                 if freq_count > x.frequency_count {
-                    found_message = Some(Message { frequency_count: freq_count, character_key: key, message: msg, line_number: line_num});
+                    found_message = Some(Message { frequency_count: freq_count, message: msg, line_number: line_num});
                 }
             }
-            None => found_message = Some(Message { frequency_count: freq_count, character_key: key, message: msg, line_number: line_num})
+            None => found_message = Some(Message { frequency_count: freq_count, message: msg, line_number: line_num})
         }
     }
 
@@ -267,7 +225,7 @@ pub fn challenge10() -> Result<()> {
     //     Some("Implementing aes-cbc-128"),
     // );
 
-    Ok(())
+    expect_eq(cipher_text, cipher_again)
 }
 
 pub fn challenge11() -> Result<()> {
@@ -285,7 +243,7 @@ pub fn challenge11() -> Result<()> {
     //     Some("Detecting aes-ecb-128 with pkcs padding and random data"),
     // );
 
-    Ok(())
+    expect_eq(num_tests, successful_detections)
 }
 
 pub fn challenge12() -> Result<()> {
@@ -525,8 +483,7 @@ pub fn challenge14() -> Result<()> {
 
     if std::str::from_utf8(&result) != std::str::from_utf8(string_to_find) {
         println!(
-            "Incorrect Result. Expected\n{:?}\nReturned\n{:?}",
-            result,
+            "Incorrect Result. Expected\n{result:?}\nReturned\n{:?}",
             string_to_find.to_vec()
         );
     }

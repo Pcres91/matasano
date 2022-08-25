@@ -13,13 +13,13 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 #[derive(Debug, Clone)]
 pub struct InvalidData;
 
+impl error::Error for InvalidData {}
+
 impl fmt::Display for InvalidData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid first item to double")
+        write!(f, "Data was invalid")
     }
 }
-
-impl error::Error for InvalidData {}
 
 pub struct Wrap(pub Vec<u8>);
 
