@@ -145,7 +145,6 @@ fn encode_biguint(bytes: &BigUint) -> Vec<char> {
         i -= i;
     }
     if padding {
-        // TODO: need to implement adding the padding char '='
         println!("Warning: base64 padding not implemented\n");
     }
 
