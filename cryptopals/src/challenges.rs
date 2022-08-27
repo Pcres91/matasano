@@ -87,7 +87,7 @@ pub fn challenge3() -> Result<()> {
     expect_eq!(expected_result, result)
 }
 
-/// Find the line that has been XOR'd with a single character key.
+/// Find the line in a file that has been XOR'd with a single character key.
 pub fn challenge4() -> Result<()> {
     use common::{
         find_best_character_key, score_buffer, hex_string_to_vec_u8, single_byte_xor,
@@ -107,7 +107,7 @@ pub fn challenge4() -> Result<()> {
     let mut found_message: Option<Message> = None;
 
     // TODO: This takes long. Need to start a task for each line gathering freq count, and only
-    //       once all are done, ompare frequency counts and check the highest
+    //       once all are done, compare frequency counts and check the highest
     for (line_num, line) in reader.lines().enumerate() {
         let bytes = hex_string_to_vec_u8(line?.as_bytes())?;
         let key = find_best_character_key(&bytes);
@@ -128,7 +128,7 @@ pub fn challenge4() -> Result<()> {
     match found_message {
         None => expect_true!(false),
         Some(x) => {
-            expect_eq!(170, x.line_number, "Message line number")?;
+            expect_eq!(170, x.line_number, "File line number with best XOR character score")?;
             expect_eq!("Now that the party is jumping\n", std::str::from_utf8(&x.buffer)?)
         }
     }

@@ -1,9 +1,10 @@
-use bitstream_io::{BigEndian, BitReader, BitWriter};
+use bitstream_io::{BigEndian, BitReader, BitWriter, BitRead, BitWrite};
 use std::collections::BTreeMap;
 use std::error;
 use std::fmt;
 use std::io;
 use std::io::Cursor;
+// use rayon::prelude::*;
 
 extern crate hex;
 extern crate num_traits;
@@ -241,7 +242,7 @@ pub fn prefix_with_rnd_bytes(range: (usize, usize), text: &[u8]) -> Vec<u8> {
 
     let mut rng = rand::thread_rng();
 
-    let num_random_bytes = rng.gen_range(range.0, range.1);
+    let num_random_bytes = rng.gen_range(range.0..range.1);
 
     // println!("rnd bytes: {}", num_random_bytes);
 

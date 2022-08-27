@@ -290,11 +290,11 @@ pub fn rnd_encryption_oracle(plain_text: &[u8]) -> Result<(Vec<u8>, bool)> {
     let mut rng = rand::thread_rng();
 
     // extend plain text with 5-10 bytes at the start and end
-    let num_prefix_bytes: usize = rng.gen_range(5, 11);
+    let num_prefix_bytes: usize = rng.gen_range(5..11);
     let mut prefix = vec![0u8; num_prefix_bytes];
     rng.fill_bytes(&mut prefix);
 
-    let num_suffix_bytes: usize = rng.gen_range(5, 11);
+    let num_suffix_bytes: usize = rng.gen_range(5..11);
     let mut suffix = vec![0u8; num_suffix_bytes];
     rng.fill_bytes(&mut suffix);
 
