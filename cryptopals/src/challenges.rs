@@ -1,10 +1,12 @@
 use crate::aes;
 use crate::base64;
 use crate::common;
+use crate::expectations::{
+    expect_eq_impl, expect_false_impl, expect_true_impl, ExpectationFailure, Result,
+};
 use crate::user_storage;
-use common::Wrap;
-use crate::expectations::{ExpectationFailure, Result, expect_eq_impl, expect_false_impl, expect_true_impl};
 use crate::{expect_eq, expect_false, expect_true};
+use common::Wrap;
 
 pub fn set1() {
     print_challenge_result(1, &challenge1);
@@ -33,7 +35,7 @@ fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Result<
         Ok(_) => println!("SUCCESSFUL: Challenge {challenge_number}"),
         Err(error) => {
             println!("FAILED:     Challenge {challenge_number}, {error}\n\n{error:?}");
-        },
+        }
     }
     println!("----------");
 }
@@ -73,8 +75,9 @@ pub fn challenge3() -> Result<()> {
     use common::{find_best_character_key, hex_string_to_vec_u8, single_byte_xor};
 
     let expected_result = "Cooking MC's like a pound of bacon";
-    let cipher =
-        hex_string_to_vec_u8(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")?;
+    let cipher = hex_string_to_vec_u8(
+        b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736",
+    )?;
 
     // let expected_result = "I'm killing your brain like a poisonous mushroom".to_string();
     // let cipher = hex_decode_bytes(b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec());
@@ -89,9 +92,7 @@ pub fn challenge3() -> Result<()> {
 
 /// Find the line in a file that has been XOR'd with a single character key.
 pub fn challenge4() -> Result<()> {
-    use common::{
-        find_best_character_key, score_buffer, hex_string_to_vec_u8, single_byte_xor,
-    };
+    use common::{find_best_character_key, hex_string_to_vec_u8, score_buffer, single_byte_xor};
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
 
@@ -101,13 +102,11 @@ pub fn challenge4() -> Result<()> {
     struct Message {
         frequency_count: i32,
         buffer: Vec<u8>,
-        line_number: usize
+        line_number: usize,
     }
 
     let mut found_message: Option<Message> = None;
 
-    // TODO: This takes long. Need to start a task for each line gathering freq count, and only
-    //       once all are done, compare frequency counts and check the highest
     for (line_num, line) in reader.lines().enumerate() {
         let bytes = hex_string_to_vec_u8(line?.as_bytes())?;
         let key = find_best_character_key(&bytes);
@@ -118,21 +117,37 @@ pub fn challenge4() -> Result<()> {
         match &found_message {
             Some(x) => {
                 if freq_count > x.frequency_count {
-                    found_message = Some(Message { frequency_count: freq_count, buffer: buf, line_number: line_num});
+                    found_message = Some(Message {
+                        frequency_count: freq_count,
+                        buffer: buf,
+                        line_number: line_num,
+                    });
                 }
             }
-            None => found_message = Some(Message { frequency_count: freq_count, buffer: buf, line_number: line_num})
+            None => {
+                found_message = Some(Message {
+                    frequency_count: freq_count,
+                    buffer: buf,
+                    line_number: line_num,
+                })
+            }
         }
     }
 
     match found_message {
         None => expect_true!(false),
         Some(x) => {
-            expect_eq!(170, x.line_number, "File line number with best XOR character score")?;
-            expect_eq!("Now that the party is jumping\n", std::str::from_utf8(&x.buffer)?)
+            expect_eq!(
+                170,
+                x.line_number,
+                "File line number with best XOR character score"
+            )?;
+            expect_eq!(
+                "Now that the party is jumping\n",
+                std::str::from_utf8(&x.buffer)?
+            )
         }
     }
-
 }
 
 pub fn challenge5() -> Result<()> {
@@ -149,7 +164,7 @@ pub fn challenge5() -> Result<()> {
 }
 
 pub fn challenge6() -> Result<()> {
-    use common::{find_key_size, find_best_character_key, repeated_xor, slice_by_byte};
+    use common::{find_best_character_key, find_key_size, repeated_xor, slice_by_byte};
 
     let cipher = base64::read_encoded_file("6.txt")?;
 
@@ -341,7 +356,7 @@ pub fn challenge12() -> Result<()> {
             }
         }
     }
-    
+
     // print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
     expect_eq!(expected, std::str::from_utf8(&result)?)
 }
@@ -380,12 +395,11 @@ pub fn challenge13() -> Result<()> {
         let mut payload_cipher = cipher_text[..32].to_vec();
         payload_cipher.extend_from_slice(&cipher_text[48..64]);
         payload_cipher.extend_from_slice(&cipher_text[32..48]);
-        
+
         // TODO: create an expect_ok! macro
         PROFILE_STORAGE.add_from_hash(&payload_cipher)
     }
 }
-
 
 // TODO: This is the least performant code. Can most likely be parallelised in some form
 pub fn challenge14() -> Result<()> {
@@ -487,8 +501,11 @@ pub fn challenge14() -> Result<()> {
         found_chars.clear();
     }
 
-    expect_eq!(string_to_find, std::str::from_utf8(&result)?, "Deciphering text with random prefix")
-
+    expect_eq!(
+        string_to_find,
+        std::str::from_utf8(&result)?,
+        "Deciphering text with random prefix"
+    )
 }
 
 #[allow(unused_assignments)]

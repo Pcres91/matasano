@@ -1,10 +1,10 @@
-use bitstream_io::{BigEndian, BitReader, BitWriter, BitRead, BitWrite};
+use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
+use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::error;
 use std::fmt;
 use std::io;
 use std::io::Cursor;
-// use rayon::prelude::*;
 
 extern crate hex;
 extern crate num_traits;
@@ -78,11 +78,11 @@ pub fn xor_bits(left: &[u8], right: &[u8]) -> Vec<u8> {
 }
 
 /// XOR each character in a buffer with a single character key.
-pub fn single_byte_xor(message: &[u8], byte: u8) -> Vec<u8> {
+pub fn single_byte_xor(cipher: &[u8], key: u8) -> Vec<u8> {
     let mut res = Vec::new();
 
-    for message_byte in message {
-        res.push(message_byte ^ byte);
+    for message_byte in cipher {
+        res.push(message_byte ^ key);
     }
 
     res
@@ -127,15 +127,13 @@ pub fn score_buffer(msg: &[u8]) -> i32 {
 
 /// return the character with the highest character "score" when XOR'd with the buffer
 pub fn find_best_character_key(cipher: &[u8]) -> u8 {
-    let mut possible_keys: Vec<(i32, u8)> = Vec::new();
-    for possible_key in 0..=0xffu32 {
-        let decoded_msg = single_byte_xor(&cipher, possible_key as u8);
-        let freq_count = score_buffer(&decoded_msg);
-        possible_keys.push((freq_count, possible_key as u8));
-    }
-    possible_keys.sort_by_key(|&k| std::cmp::Reverse(k.0));
-    // println!("{:?}", &possible_keys[0..20]);
-    possible_keys[0].1
+    (0..0xffu8)
+        .into_par_iter()
+        .map(|key| (single_byte_xor(&cipher, key), key))
+        .map(|(decoded_message, key)| (score_buffer(&decoded_message), key))
+        .max_by(|left, right| left.0.cmp(&right.0))
+        .unwrap()
+        .1
 }
 
 pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
@@ -154,10 +152,7 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     cipher
 }
 
-pub fn hamming_distance(
-    string_1: &[u8],
-    string_2: &[u8],
-) -> core::result::Result<usize, io::Error> {
+pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize> {
     let mut cur1 = Cursor::new(&string_1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
     let mut cur2 = Cursor::new(&string_2);

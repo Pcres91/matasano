@@ -49,24 +49,25 @@ macro_rules! expect_ok {
     ($function:expr, $arg:expr) => {
         match $function($arg) {
             Ok(()) => Ok(()),
-            Err(_) => Err(ExpectationFailure.into())
+            Err(_) => Err(ExpectationFailure.into()),
         }
     };
 }
 
 pub fn expect_eq_impl<T>(expected: T, actual: T, message: Option<&str>) -> Result<()>
 where
-    T: std::cmp::Eq, T: std::fmt::Debug
+    T: std::cmp::Eq,
+    T: std::fmt::Debug,
 {
     match expected == actual {
         true => Ok(()),
         false => {
             match message {
                 Some(m) => println!("Expected {expected:?}\nActual {actual:?}. {m}"),
-                None => println!("Expected {expected:?}\nActual {actual:?}.")
+                None => println!("Expected {expected:?}\nActual {actual:?}."),
             }
             Err(ExpectationFailure.into())
-        },
+        }
     }
 }
 
@@ -76,10 +77,10 @@ pub fn expect_true_impl(expected: bool, message: Option<&str>) -> Result<()> {
         false => {
             match message {
                 Some(m) => println!("Invalid Expectation: {m}"),
-                None => println!("Invalid Expectation")
+                None => println!("Invalid Expectation"),
             }
             Err(ExpectationFailure.into())
-        },
+        }
     }
 }
 

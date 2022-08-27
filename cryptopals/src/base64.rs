@@ -1,4 +1,4 @@
-use bitstream_io::{BigEndian, BitReader, BitWriter, BitRead, BitWrite};
+use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 use std::io::{Cursor, Error, ErrorKind};
 
 extern crate num_bigint as bigint;
@@ -60,7 +60,10 @@ pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>, Error> {
 // this converts u8 to base64. If topmost bits aren't 00, returns None
 fn encode_byte(byte: u8) -> Result<char, Error> {
     if byte > 63 {
-        return Err(Error::new(ErrorKind::InvalidData, "Byte to encode as base64 out of range"));
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Byte to encode as base64 out of range",
+        ));
     }
     // capitals
     if byte <= 25 {
@@ -104,7 +107,10 @@ fn decode_byte(byte: u8) -> Result<u8, Error> {
     }
     // padding returns none
     else {
-        Err(Error::new(ErrorKind::InvalidData, "Byte to decode from base64 out of range"))
+        Err(Error::new(
+            ErrorKind::InvalidData,
+            "Byte to decode from base64 out of range",
+        ))
     }
 }
 
