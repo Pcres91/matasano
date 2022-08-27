@@ -1,4 +1,7 @@
 use crate::aes;
+use crate::expect_eq;
+use crate::expect_true;
+use crate::expectations::{expect_eq_impl, expect_true_impl};
 use std::error;
 use std::fmt;
 
@@ -9,7 +12,7 @@ struct InvalidEmail;
 
 impl fmt::Display for InvalidEmail {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid first item to double")
+        write!(f, "Invalid email format")
     }
 }
 
@@ -39,7 +42,7 @@ impl ProfileStorage {
         let cookie = aes::decrypt_ecb_128(hash, &RND_KEY)?;
 
         self.profiles
-            .push(parse_cookie(std::str::from_utf8(&cookie).unwrap())?);
+            .push(parse_cookie(std::str::from_utf8(&cookie)?)?);
 
         Ok(())
     }
@@ -63,14 +66,13 @@ pub struct Profile {
 pub fn parse_cookie(cookie: &str) -> Result<Profile> {
     let tokens: Vec<&str> = cookie.split(&['=', '&'][..]).collect();
 
-    // @TODO: change these all to return Error
-    assert!(tokens.len() == 6);
+    expect_eq!(6, tokens.len())?;
 
-    assert!(tokens[0] == "email");
-    assert!(tokens[1].contains('@'));
-    assert!(tokens[2] == "uid");
-    assert!(tokens[4] == "role");
-    assert!(tokens[5] == "Admin" || tokens[5] == "User");
+    expect_eq!("email", tokens[0])?;
+    expect_true!(tokens[1].contains('@'))?;
+    expect_eq!("uid", tokens[2])?;
+    expect_eq!("role", tokens[4])?;
+    expect_true!(tokens[5] == "Admin" || tokens[5] == "User")?;
 
     let new_role = if tokens[5] == "Admin" {
         ProfileRole::Admin
@@ -87,8 +89,8 @@ pub fn parse_cookie(cookie: &str) -> Result<Profile> {
     })
 }
 
-/// # Safety
-pub unsafe fn profile_for(email: &str) -> Result<Vec<u8>> {
+/// TODO: Safety
+pub unsafe fn create_hash_profile_for(email: &str) -> Result<Vec<u8>> {
     if email.contains('&') || email.contains('=') {
         return Err(InvalidEmail.into());
     }
@@ -99,17 +101,6 @@ pub unsafe fn profile_for(email: &str) -> Result<Vec<u8>> {
         NEXT_UID,
         ProfileRole::User
     );
-
-    // let new_profile = Profile {
-    //     email: email.to_string(),
-    //     uid: NEXT_UID,
-    //     role: ProfileRole::User,
-    //     encoded_str: output.to_string(),
-    //     hash: aes::encrypt_ecb_128(&output[..].as_bytes(), &RND_KEY)?,
-    // };
-
-    // PROFILE_STORAGE.profiles.push(new_profile.clone());
-    // NEXT_UID += 1;
 
     match aes::encrypt_ecb_128(&output[..].as_bytes(), &RND_KEY) {
         Ok(res) => Ok(res),

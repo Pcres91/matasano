@@ -3,7 +3,8 @@ use crate::base64;
 use crate::common;
 use crate::user_storage;
 use common::Wrap;
-use crate::expectations::*;
+use crate::expectations::{ExpectationFailure, Result, expect_eq_impl, expect_false_impl, expect_true_impl};
+use crate::{expect_eq, expect_false, expect_true};
 
 pub fn set1() {
     print_challenge_result(1, &challenge1);
@@ -28,13 +29,13 @@ pub fn set2() {
 }
 
 fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Result<()>) {
-
     match challenge() {
         Ok(_) => println!("SUCCESSFUL: Challenge {challenge_number}"),
         Err(error) => {
-            println!("FAILED:     Challenge {challenge_number}, {error}");
+            println!("FAILED:     Challenge {challenge_number}, {error}\n\n{error:?}");
         },
     }
+    println!("----------");
 }
 
 pub fn challenge1() -> Result<()> {
@@ -48,7 +49,7 @@ pub fn challenge1() -> Result<()> {
 
     let encoded = base64::pretty_print(&bytes)?;
 
-    expect_eq(exp_encoding, encoded)
+    expect_eq!(exp_encoding, encoded, "Encoding a hex string")
 }
 
 pub fn challenge2() -> Result<()> {
@@ -61,7 +62,7 @@ pub fn challenge2() -> Result<()> {
 
     let expected_result = hex_decode_bytes(b"746865206b696420646f6e277420706c6179")?;
 
-    expect_eq(expected_result, result)
+    expect_eq!(expected_result, result)
 }
 
 pub fn challenge3() -> Result<()> {
@@ -79,7 +80,7 @@ pub fn challenge3() -> Result<()> {
     let tmp = single_byte_xor(&cipher, key);
     let result = std::str::from_utf8(&tmp)?;
 
-    expect_eq(expected_result, result)
+    expect_eq!(expected_result, result)
 }
 
 pub fn challenge4() -> Result<()> {
@@ -120,10 +121,10 @@ pub fn challenge4() -> Result<()> {
     }
 
     match found_message {
-        None => expect_true(false),
+        None => expect_true!(false),
         Some(x) => {
-            expect_eq(170, x.line_number)?;
-            expect_eq("Now that the party is jumping", &x.message)
+            expect_eq!(170, x.line_number, "Message line number")?;
+            expect_eq!("Now that the party is jumping", &x.message)
         }
     }
 
@@ -139,7 +140,7 @@ pub fn challenge5() -> Result<()> {
     use common::hex_decode_bytes;
     let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f")?;
 
-    expect_eq(expected_result, cipher)
+    expect_eq!(expected_result, cipher)
 }
 
 pub fn challenge6() -> Result<()> {
@@ -157,13 +158,16 @@ pub fn challenge6() -> Result<()> {
         .collect();
 
     let tmp = repeated_xor(&cipher, &key);
-    let result = std::str::from_utf8(&tmp)?;
+    let result = String::from_utf8(tmp)?;
 
-    expect_eq("Terminator X: Bring the noise", result)
+    let expected = "I'm back and I'm ringin' the bell \nA rockin' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that's my DJ Deshay cuttin' all them Z's \nHittin' hard and the girlies goin' crazy \nVanilla's on the mike, man I'm not lazy. \n\nI'm lettin' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse's to the side yellin', Go Vanilla Go! \n\nSmooth 'cause that's the way I will be \nAnd if you don't give a damn, then \nWhy you starin' at me \nSo get off 'cause I control the stage \nThere's no dissin' allowed \nI'm in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n' play \n\nStage 2 -- Yea the one ya' wanna listen to \nIt's off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI'm an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI'm like Samson -- Samson to Delilah \nThere's no denyin', You can try to hang \nBut you'll keep tryin' to get my style \nOver and over, practice makes perfect \nBut not if you're a loafer. \n\nYou'll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I'm comin' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin' \nVanilla Ice is sellin' and you people are buyin' \n'Cause why the freaks are jockin' like Crazy Glue \nMovin' and groovin' trying to sing along \nAll through the ghetto groovin' this here song \nNow you're amazed by the VIP posse. \n\nSteppin' so hard like a German Nazi \nStartled by the bases hittin' ground \nThere's no trippin' on mine, I'm just gettin' down \nSparkamatic, I'm hangin' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n'89 in my time! You, '90 is my year. \n\nYou're weakenin' fast, YO! and I can tell it \nYour body's gettin' hot, so, so I can smell it \nSo don't be mad and don't be sad \n'Cause the lyrics belong to ICE, You can call me Dad \nYou're pitchin' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don't be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you're dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
+
+    expect_eq!(expected, result.as_str())
 }
 
 pub fn challenge7() -> Result<()> {
     let cipher = base64::read_encoded_file("7.txt")?;
+    let expected = "I'm back and I'm ringin' the bell \nA rockin' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that's my DJ Deshay cuttin' all them Z's \nHittin' hard and the girlies goin' crazy \nVanilla's on the mike, man I'm not lazy. \n\nI'm lettin' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse's to the side yellin', Go Vanilla Go! \n\nSmooth 'cause that's the way I will be \nAnd if you don't give a damn, then \nWhy you starin' at me \nSo get off 'cause I control the stage \nThere's no dissin' allowed \nI'm in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n' play \n\nStage 2 -- Yea the one ya' wanna listen to \nIt's off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI'm an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI'm like Samson -- Samson to Delilah \nThere's no denyin', You can try to hang \nBut you'll keep tryin' to get my style \nOver and over, practice makes perfect \nBut not if you're a loafer. \n\nYou'll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I'm comin' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin' \nVanilla Ice is sellin' and you people are buyin' \n'Cause why the freaks are jockin' like Crazy Glue \nMovin' and groovin' trying to sing along \nAll through the ghetto groovin' this here song \nNow you're amazed by the VIP posse. \n\nSteppin' so hard like a German Nazi \nStartled by the bases hittin' ground \nThere's no trippin' on mine, I'm just gettin' down \nSparkamatic, I'm hangin' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n'89 in my time! You, '90 is my year. \n\nYou're weakenin' fast, YO! and I can tell it \nYour body's gettin' hot, so, so I can smell it \nSo don't be mad and don't be sad \n'Cause the lyrics belong to ICE, You can call me Dad \nYou're pitchin' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don't be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you're dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
 
     let key = b"YELLOW SUBMARINE";
 
@@ -173,7 +177,7 @@ pub fn challenge7() -> Result<()> {
 
     // println!("{_plain_text}");
 
-    expect_eq("hi", _plain_text)
+    expect_eq!(expected, _plain_text)
 }
 
 pub fn challenge8() -> Result<()> {
@@ -195,7 +199,7 @@ pub fn challenge8() -> Result<()> {
         }
     }
 
-    expect_false(lines_in_ecb_mode.is_empty())
+    expect_false!(lines_in_ecb_mode.is_empty())
 }
 
 pub fn challenge9() -> Result<()> {
@@ -225,7 +229,7 @@ pub fn challenge10() -> Result<()> {
     //     Some("Implementing aes-cbc-128"),
     // );
 
-    expect_eq(cipher_text, cipher_again)
+    expect_eq!(cipher_text, cipher_again)
 }
 
 pub fn challenge11() -> Result<()> {
@@ -243,11 +247,12 @@ pub fn challenge11() -> Result<()> {
     //     Some("Detecting aes-ecb-128 with pkcs padding and random data"),
     // );
 
-    expect_eq(num_tests, successful_detections)
+    expect_eq!(num_tests, successful_detections)
 }
 
 pub fn challenge12() -> Result<()> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
+    let expected = "Rollin' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n";
 
     struct ConcattorEcbOracle {
         key: Vec<u8>,
@@ -331,10 +336,9 @@ pub fn challenge12() -> Result<()> {
             }
         }
     }
-    println!("{}", Wrap(result));
-
+    
     // print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
-    Ok(())
+    expect_eq!(expected, std::str::from_utf8(&result)?)
 }
 
 pub fn challenge13() -> Result<()> {
@@ -357,7 +361,7 @@ pub fn challenge13() -> Result<()> {
         payload.extend_from_slice(b".com"); // need to place "&uid=0&role=" at the end of a block, so extend email
 
         use std::str::from_utf8;
-        let cipher_text = profile_for(from_utf8(&payload).unwrap())?;
+        let cipher_text = create_hash_profile_for(from_utf8(&payload)?)?;
 
         // for i in 0..cipher_text.len() / 16 {
         //     println!(
@@ -371,20 +375,16 @@ pub fn challenge13() -> Result<()> {
         let mut payload_cipher = cipher_text[..32].to_vec();
         payload_cipher.extend_from_slice(&cipher_text[48..64]);
         payload_cipher.extend_from_slice(&cipher_text[32..48]);
-        PROFILE_STORAGE.add_from_hash(&payload_cipher)?;
-
-        // print_challenge_result(
-        //     13,
-        //     PROFILE_STORAGE.profiles.len() == 1,
-        //     Some("Sent payload without knowing key"),
-        // );
+        
+        // TODO: create an expect_ok! macro
+        PROFILE_STORAGE.add_from_hash(&payload_cipher)
     }
-
-    Ok(())
 }
 
+
+// TODO: This is the least performant code. Can most likely be parallelised in some form
 pub fn challenge14() -> Result<()> {
-    let string_to_find = b"Let's see if we can decipher this";
+    let string_to_find = "Let's see if we can decipher this";
 
     let encrypt_with_rnd_prefix = |plain_text: &[u8], key: &[u8]| -> aes::Result<Vec<u8>> {
         use common::prefix_with_rnd_bytes;
@@ -406,10 +406,11 @@ pub fn challenge14() -> Result<()> {
     let mut text_length = 0;
 
     let mut num_pad = 0usize;
+
     while !found_text_length {
         let mut padding = vec![16u8; 16];
         padding.extend_from_slice(&vec![b'A'; num_pad]);
-        padding.extend_from_slice(&string_to_find[..]);
+        padding.extend_from_slice(&string_to_find.as_bytes()[..]);
         let cipher = oracle.encrypt(&padding)?;
 
         if cipher[cipher.len() - 16..cipher.len()] == padding_cipher_block[..] {
@@ -442,7 +443,7 @@ pub fn challenge14() -> Result<()> {
             let num_known_bytes = 15 - found_chars.len();
             payload.extend_from_slice(&vec![b'A'; num_known_bytes]);
 
-            payload.extend_from_slice(&string_to_find[block_idx..end_block_idx]);
+            payload.extend_from_slice(&string_to_find.as_bytes()[block_idx..end_block_idx]);
 
             let cipher = oracle.encrypt(&payload)?;
 
@@ -481,19 +482,8 @@ pub fn challenge14() -> Result<()> {
         found_chars.clear();
     }
 
-    if std::str::from_utf8(&result) != std::str::from_utf8(string_to_find) {
-        println!(
-            "Incorrect Result. Expected\n{result:?}\nReturned\n{:?}",
-            string_to_find.to_vec()
-        );
-    }
+    expect_eq!(string_to_find, std::str::from_utf8(&result)?, "Deciphering text with random prefix")
 
-    // print_challenge_result(
-    //     14,
-    //     std::str::from_utf8(&result) == std::str::from_utf8(string_to_find),
-    //     Some("Deciphered text with random prefix"),
-    // );
-    Ok(())
 }
 
 #[allow(unused_assignments)]
@@ -503,7 +493,7 @@ pub fn challenge15() -> Result<()> {
 
     let res = aes::remove_pkcs7_padding(&message)?;
 
-    match expect_eq(message.len() - 4, res.len()) {
+    match expect_eq!(message.len() - 4, res.len()) {
         Ok(()) => (),
         Err(err) => return Err(err),
     }
@@ -515,7 +505,7 @@ pub fn challenge15() -> Result<()> {
 
     match aes::remove_pkcs7_padding(&message2) {
         Ok(_) => Err(ExpectationFailure.into()),
-        Err(_) => expect_eq(original_length2, message2.len()),
+        Err(_) => expect_eq!(original_length2, message2.len()),
     }
 
     // print_challenge_result(15, challenge_success, Some("Testing Function to remove padding"));

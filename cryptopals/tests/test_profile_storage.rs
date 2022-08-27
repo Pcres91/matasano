@@ -6,7 +6,7 @@ use crypto::user_storage::*;
 #[test]
 fn test_adding_a_profile() {
     unsafe {
-        let out = profile_for("test@tester.com").unwrap();
+        let out = create_hash_profile_for("test@tester.com").unwrap();
         PROFILE_STORAGE.add_from_hash(&out).unwrap();
         assert_eq!(PROFILE_STORAGE.profiles.len(), 1);
 
@@ -20,7 +20,7 @@ fn test_adding_a_profile() {
 #[test]
 fn test_return_from_profile_for() {
     unsafe {
-        let out = profile_for("next@tester.com").unwrap();
+        let out = create_hash_profile_for("next@tester.com").unwrap();
         use std::str::from_utf8;
         assert_eq!(
             from_utf8(&aes::decrypt_ecb_128(&out, &RND_KEY).unwrap()).unwrap(),

@@ -14,23 +14,75 @@ impl fmt::Display for ExpectationFailure {
 
 impl error::Error for ExpectationFailure {}
 
-pub fn expect_eq<T>(expected: T, actual: T) -> Result<()>
+#[macro_export]
+macro_rules! expect_eq {
+    ($expected:expr, $actual:expr, $message:literal) => {
+        expect_eq_impl($expected, $actual, Some($message))
+    };
+    ($expected:expr, $actual:expr) => {
+        expect_eq_impl($expected, $actual, None)
+    };
+}
+
+#[macro_export]
+macro_rules! expect_false {
+    ($expected:expr, $message:literal) => {
+        expect_false_impl($expected, Some($message))
+    };
+    ($expected:expr) => {
+        expect_false_impl($expected, None)
+    };
+}
+
+#[macro_export]
+macro_rules! expect_true {
+    ($expected:expr, $message:literal) => {
+        expect_true_impl($expected, Some($message))
+    };
+    ($expected:expr) => {
+        expect_true_impl($expected, None)
+    };
+}
+
+#[macro_export]
+macro_rules! expect_ok {
+    ($function:expr, $arg:expr) => {
+        match $function($arg) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(ExpectationFailure.into())
+        }
+    };
+}
+
+pub fn expect_eq_impl<T>(expected: T, actual: T, message: Option<&str>) -> Result<()>
 where
-    T: std::cmp::Eq,
+    T: std::cmp::Eq, T: std::fmt::Debug
 {
     match expected == actual {
         true => Ok(()),
-        false => Err(ExpectationFailure.into()),
+        false => {
+            match message {
+                Some(m) => println!("Expected {expected:?}\nActual {actual:?}. {m}"),
+                None => println!("Expected {expected:?}\nActual {actual:?}.")
+            }
+            Err(ExpectationFailure.into())
+        },
     }
 }
 
-pub fn expect_true(expected: bool) -> Result<()> {
+pub fn expect_true_impl(expected: bool, message: Option<&str>) -> Result<()> {
     match expected {
         true => Ok(()),
-        false => Err(ExpectationFailure.into()),
+        false => {
+            match message {
+                Some(m) => println!("Invalid Expectation: {m}"),
+                None => println!("Invalid Expectation")
+            }
+            Err(ExpectationFailure.into())
+        },
     }
 }
 
-pub fn expect_false(expected: bool) -> Result<()> {
-    expect_true(!expected)
+pub fn expect_false_impl(expected: bool, message: Option<&str>) -> Result<()> {
+    expect_true_impl(!expected, message)
 }
