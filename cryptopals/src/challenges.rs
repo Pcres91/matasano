@@ -7,6 +7,7 @@ use crate::expectations::{
 use crate::user_storage;
 use crate::{expect_eq, expect_false, expect_true};
 use common::Wrap;
+use rayon::prelude::*;
 
 pub fn set1() {
     print_challenge_result(1, &challenge1);
@@ -30,7 +31,7 @@ pub fn set2() {
     print_challenge_result(16, &challenge16);
 }
 
-fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Result<()>) {
+pub fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Result<()>) {
     match challenge() {
         Ok(_) => println!("SUCCESSFUL: Challenge {challenge_number}"),
         Err(error) => {
@@ -92,62 +93,27 @@ pub fn challenge3() -> Result<()> {
 
 /// Find the line in a file that has been XOR'd with a single character key.
 pub fn challenge4() -> Result<()> {
-    use common::{find_best_character_key, hex_string_to_vec_u8, score_buffer, single_byte_xor};
+    use common::{find_best_character_key_and_score, hex_string_to_vec_u8};
     use std::fs::File;
-    use std::io::{prelude::*, BufReader};
+    use std::io::prelude::*;
 
-    let file = File::open("4.txt")?;
-    let reader = BufReader::new(file);
+    let mut entire_file = String::from("");
 
-    struct Message {
-        frequency_count: i32,
-        buffer: Vec<u8>,
-        line_number: usize,
-    }
+    let mut file = File::open("4.txt")?;
+    file.read_to_string(&mut entire_file)?;
 
-    let mut found_message: Option<Message> = None;
+    let result = entire_file
+        .par_lines()
+        .map(|line| hex_string_to_vec_u8(&line.as_bytes()).unwrap())
+        .map(|ciphertext| find_best_character_key_and_score(&ciphertext))
+        .max_by(|left, right| left.score.cmp(&right.score))
+        .unwrap();
 
-    for (line_num, line) in reader.lines().enumerate() {
-        let bytes = hex_string_to_vec_u8(line?.as_bytes())?;
-        let key = find_best_character_key(&bytes);
-
-        let buf = single_byte_xor(&bytes, key);
-        let freq_count = score_buffer(&buf);
-
-        match &found_message {
-            Some(x) => {
-                if freq_count > x.frequency_count {
-                    found_message = Some(Message {
-                        frequency_count: freq_count,
-                        buffer: buf,
-                        line_number: line_num,
-                    });
-                }
-            }
-            None => {
-                found_message = Some(Message {
-                    frequency_count: freq_count,
-                    buffer: buf,
-                    line_number: line_num,
-                })
-            }
-        }
-    }
-
-    match found_message {
-        None => expect_true!(false),
-        Some(x) => {
-            expect_eq!(
-                170,
-                x.line_number,
-                "File line number with best XOR character score"
-            )?;
-            expect_eq!(
-                "Now that the party is jumping\n",
-                std::str::from_utf8(&x.buffer)?
-            )
-        }
-    }
+    println!("key: {}", base64::encode_byte(result.key)?); // key is 53, or "1" in base64
+    expect_eq!(
+        "Now that the party is jumping\n",
+        std::str::from_utf8(&result.plaintext)?
+    )
 }
 
 pub fn challenge5() -> Result<()> {

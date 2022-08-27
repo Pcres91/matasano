@@ -101,7 +101,7 @@ fn ascii_to_uppercase(chr: u8) -> u8 {
 /// this should be sufficient.
 /// Shamelessly stolen from
 /// http://www.fitaly.com/board/domper3/posts/136.html
-pub fn score_buffer(msg: &[u8]) -> i32 {
+pub fn score_text(msg: &[u8]) -> i32 {
     let mut freq_count = 0;
     for &byte in msg {
         if [101, 32, 116, 111, 97, 110, 105, 115, 114, 108].contains(&byte) {
@@ -126,15 +126,34 @@ pub fn score_buffer(msg: &[u8]) -> i32 {
 
 /// return the character with the highest character "score" when XOR'd with the buffer
 pub fn find_best_character_key(cipher: &[u8]) -> u8 {
-    (0..0xffu8)
-        .into_par_iter()
-        .map(|key| (single_byte_xor(&cipher, key), key))
-        .map(|(decoded_message, key)| (score_buffer(&decoded_message), key))
-        .max_by(|left, right| left.0.cmp(&right.0))
-        .unwrap()
-        .1
+    find_best_character_key_and_score(cipher).key
 }
 
+pub struct ScoredText {
+    pub key: u8,
+    pub score: i32,
+    pub plaintext: Vec<u8>,
+}
+
+impl From<(u8, i32, Vec<u8>)> for ScoredText {
+    fn from(f: (u8, i32, Vec<u8>)) -> Self {
+        ScoredText { key: f.0, score: f.1, plaintext: f.2 }
+    }   
+}
+
+/// same as find_best_character_key, but also return the score.
+/// Returned as (key, score)
+pub fn find_best_character_key_and_score(cipher: &[u8]) -> ScoredText {
+    (0..0xffu8)
+        .into_par_iter()
+        .map(|key| (key, single_byte_xor(&cipher, key)))
+        .map(|(key, decoded_message)| (key, score_text(&decoded_message), decoded_message))
+        .max_by(|left, right| left.1.cmp(&right.1))
+        .unwrap()
+        .into()
+}
+
+/// cycle through the key, XOR'ing the text with each subsequent character of the key
 pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     fn xor_with_key(chunk: &[u8], key: &[u8]) -> Vec<u8> {
         chunk
@@ -150,14 +169,15 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize> {
-    let mut cur1 = Cursor::new(&string_1);
+pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
+    let mut cur1 = Cursor::new(&string1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
-    let mut cur2 = Cursor::new(&string_2);
+    let mut cur2 = Cursor::new(&string2);
     let mut read2 = BitReader::endian(&mut cur2, BigEndian);
 
+    // TODO: functional?
     let mut distance = 0;
-    for _ in 0..(string_1.len() * 8) {
+    for _ in 0..(string1.len() * 8) {
         let res = read1.read_bit()? ^ read2.read_bit()?;
         if res {
             distance += 1

@@ -57,8 +57,8 @@ pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>, Error> {
     Ok(data)
 }
 
-// this converts u8 to base64. If topmost bits aren't 00, returns None
-fn encode_byte(byte: u8) -> Result<char, Error> {
+// this converts base64 to char. If topmost bits aren't 00, returns None
+pub fn encode_byte(byte: u8) -> Result<char, Error> {
     if byte > 63 {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -84,7 +84,7 @@ fn encode_byte(byte: u8) -> Result<char, Error> {
 }
 
 /// Tries to decode a char into its base64 representation.
-fn decode_byte(byte: u8) -> Result<u8, Error> {
+pub fn decode_byte(byte: u8) -> Result<u8, Error> {
     // capitals
     if byte >= 65 && byte <= 90 {
         Ok(byte - 65)

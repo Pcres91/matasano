@@ -2,6 +2,5 @@
 use crypto::challenges::*;
 
 fn main() {
-    set1();
-    set2();
+    print_challenge_result(4, &challenge4);
 }
