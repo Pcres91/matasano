@@ -3,7 +3,6 @@ use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::error;
 use std::fmt;
-use std::io;
 use std::io::Cursor;
 
 extern crate hex;
@@ -137,19 +136,18 @@ pub fn find_best_character_key(cipher: &[u8]) -> u8 {
 }
 
 pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
-    let mut idx = 0;
-    let mut cipher: Vec<u8> = vec![];
-
-    for val in text {
-        cipher.push(val ^ key[idx]);
-
-        idx += 1;
-        if idx == key.len() {
-            idx = 0
-        };
+    fn xor_with_key(chunk: &[u8], key: &[u8]) -> Vec<u8> {
+        chunk
+            .iter()
+            .zip(key.iter().cycle())
+            .map(|(c, key_char)| c ^ key_char)
+            .collect()
     }
 
-    cipher
+    text.par_chunks(key.len())
+        .map(|chunk| xor_with_key(chunk, key))
+        .flatten()
+        .collect()
 }
 
 pub fn hamming_distance(string_1: &[u8], string_2: &[u8]) -> Result<usize> {
