@@ -33,8 +33,8 @@ impl fmt::Display for Wrap {
 }
 
 /// converts a string of hex into bytes
-/// ie, "08af" -> vec![0x0, 0x8, 0xa, 0xf]
-pub fn hex_decode_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
+/// ie, "0123afbe" -> vec![0x01, 0x23, 0xaf, 0xbe]
+pub fn hex_string_to_vec_u8(bytes: &[u8]) -> Result<Vec<u8>> {
     match hex::decode(bytes) {
         Ok(res) => Ok(res),
         Err(hex_error) => Err(hex_error.into()),
@@ -76,6 +76,7 @@ pub fn xor_bits(left: &[u8], right: &[u8]) -> Vec<u8> {
     writer.into_writer()
 }
 
+/// XOR each character in a buffer with a single character key.
 pub fn single_byte_xor(message: &[u8], byte: u8) -> Vec<u8> {
     let mut res = Vec::new();
 
@@ -95,23 +96,12 @@ fn ascii_to_uppercase(chr: u8) -> u8 {
     chr
 }
 
-pub fn get_common_letter_frequencies(msg: &[u8]) -> i32 {
-    // list of the most frequent ASCII characters
-    // without characters or punctuation. For long texts
-    // this should be sufficient
-    // shamelessly stolen from
-    // http://www.fitaly.com/board/domper3/posts/136.html
-    // [101, 32, 116, 111, 97, 110, 105, 115, 114, 108]     4
-    // [104, 100, 99, 117, 109, 103, 112, 46, 45, 102]      3
-    // [119, 121, 98, 118, 44, 107, 149, 48, 49, 58]        2
-    // [83, 67, 77, 84, 73, 68, 65, 69, 80, 87]             1
-    // [82, 39, 34, 72, 41, 40, 66, 78, 120, 76]            0
-    // [71, 51, 79, 74, 53, 47, 63, 70, 52, 62]            -1
-    // [60, 59, 95, 54, 56, 55, 57, 86, 106, 85]           -2
-    // [113, 75, 42, 122, 36, 88, 81, 89, 61, 38]          -3
-    // [43, 35, 37, 93, 91, 90, 64, 33, 9, 125]            -4
-    // [92, 183, 96, 124, 126, 237]                        -5
-
+/// list of the most frequent ASCII characters
+/// without characters or punctuation. For long texts
+/// this should be sufficient.
+/// Shamelessly stolen from
+/// http://www.fitaly.com/board/domper3/posts/136.html
+pub fn score_buffer(msg: &[u8]) -> i32 {
     let mut freq_count = 0;
     for &byte in msg {
         if [101, 32, 116, 111, 97, 110, 105, 115, 114, 108].contains(&byte) {
@@ -134,11 +124,12 @@ pub fn get_common_letter_frequencies(msg: &[u8]) -> i32 {
     freq_count
 }
 
-pub fn find_single_char_key(cipher: &[u8]) -> u8 {
+/// return the character with the highest character "score" when XOR'd with the buffer
+pub fn find_best_character_key(cipher: &[u8]) -> u8 {
     let mut possible_keys: Vec<(i32, u8)> = Vec::new();
     for possible_key in 0..=0xffu32 {
         let decoded_msg = single_byte_xor(&cipher, possible_key as u8);
-        let freq_count = get_common_letter_frequencies(&decoded_msg);
+        let freq_count = score_buffer(&decoded_msg);
         possible_keys.push((freq_count, possible_key as u8));
     }
     possible_keys.sort_by_key(|&k| std::cmp::Reverse(k.0));

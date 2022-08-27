@@ -4,7 +4,7 @@ use std::io::{Cursor, Error};
 extern crate num_bigint as bigint;
 use bigint::BigUint;
 
-pub fn pretty_print(bytes: &[u8]) -> Result<String, Error> {
+pub fn char_bytes_to_base64(bytes: &[u8]) -> Result<String, Error> {
     Ok(encode(bytes)?.into_iter().collect())
 }
 
@@ -80,7 +80,7 @@ fn encode_byte(byte: u8) -> Result<char, Error> {
     }
 }
 
-// decodes a char into its base64 representation. If it doesn't have one, returns None
+/// Tries to decode a char into its base64 representation.
 fn decode_byte(byte: u8) -> Result<u8, Error> {
     // capitals
     if byte >= 65 && byte <= 90 {

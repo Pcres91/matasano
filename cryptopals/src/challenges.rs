@@ -38,44 +38,48 @@ fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Result<
     println!("----------");
 }
 
+/// Converting a string of hex to bytes representing chars, then those chars to base64
 pub fn challenge1() -> Result<()> {
-    use common::hex_decode_bytes;
+    use common::hex_string_to_vec_u8;
 
     let hex_values_as_string = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let exp_encoding =
         "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
 
-    let bytes = hex_decode_bytes(hex_values_as_string)?;
+    // bytes are just chars showing "I'm killing your brain like a poisonous mushroom"
+    let bytes = hex_string_to_vec_u8(hex_values_as_string)?;
 
-    let encoded = base64::pretty_print(&bytes)?;
+    let encoded = base64::char_bytes_to_base64(&bytes)?;
 
     expect_eq!(exp_encoding, encoded, "Encoding a hex string")
 }
 
+/// take two buffers of equal length and produce their XOR combination
 pub fn challenge2() -> Result<()> {
-    use common::{hex_decode_bytes, xor_bytes};
+    use common::{hex_string_to_vec_u8, xor_bytes};
 
-    let a = hex_decode_bytes(b"1c0111001f010100061a024b53535009181c")?;
-    let b = hex_decode_bytes(b"686974207468652062756c6c277320657965")?;
+    let a = hex_string_to_vec_u8(b"1c0111001f010100061a024b53535009181c")?;
+    let b = hex_string_to_vec_u8(b"686974207468652062756c6c277320657965")?;
 
     let result = xor_bytes(&a, &b)?;
 
-    let expected_result = hex_decode_bytes(b"746865206b696420646f6e277420706c6179")?;
+    let expected_result = hex_string_to_vec_u8(b"746865206b696420646f6e277420706c6179")?;
 
     expect_eq!(expected_result, result)
 }
 
+/// Find the single character that a buffer has been XOR'd with.
 pub fn challenge3() -> Result<()> {
-    use common::{find_single_char_key, hex_decode_bytes, single_byte_xor};
+    use common::{find_best_character_key, hex_string_to_vec_u8, single_byte_xor};
 
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher =
-        hex_decode_bytes(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")?;
+        hex_string_to_vec_u8(b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")?;
 
     // let expected_result = "I'm killing your brain like a poisonous mushroom".to_string();
     // let cipher = hex_decode_bytes(b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d".to_vec());
 
-    let key = find_single_char_key(&cipher);
+    let key = find_best_character_key(&cipher);
 
     let tmp = single_byte_xor(&cipher, key);
     let result = std::str::from_utf8(&tmp)?;
@@ -83,9 +87,10 @@ pub fn challenge3() -> Result<()> {
     expect_eq!(expected_result, result)
 }
 
+/// Find the line that has been XOR'd with a single character key.
 pub fn challenge4() -> Result<()> {
     use common::{
-        find_single_char_key, get_common_letter_frequencies, hex_decode_bytes, single_byte_xor,
+        find_best_character_key, score_buffer, hex_string_to_vec_u8, single_byte_xor,
     };
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
@@ -95,28 +100,28 @@ pub fn challenge4() -> Result<()> {
 
     struct Message {
         frequency_count: i32,
-        message: String,
+        buffer: Vec<u8>,
         line_number: usize
     }
 
     let mut found_message: Option<Message> = None;
 
+    // TODO: This takes long. Need to start a task for each line gathering freq count, and only
+    //       once all are done, ompare frequency counts and check the highest
     for (line_num, line) in reader.lines().enumerate() {
-        let bytes = hex_decode_bytes(line?.as_bytes())?;
-        let key = find_single_char_key(&bytes);
+        let bytes = hex_string_to_vec_u8(line?.as_bytes())?;
+        let key = find_best_character_key(&bytes);
 
-        let tmp = single_byte_xor(&bytes, key);
-        let msg = String::from_utf8(tmp)?;
-
-        let freq_count = get_common_letter_frequencies(msg.as_bytes());
+        let buf = single_byte_xor(&bytes, key);
+        let freq_count = score_buffer(&buf);
 
         match &found_message {
             Some(x) => {
                 if freq_count > x.frequency_count {
-                    found_message = Some(Message { frequency_count: freq_count, message: msg, line_number: line_num});
+                    found_message = Some(Message { frequency_count: freq_count, buffer: buf, line_number: line_num});
                 }
             }
-            None => found_message = Some(Message { frequency_count: freq_count, message: msg, line_number: line_num})
+            None => found_message = Some(Message { frequency_count: freq_count, buffer: buf, line_number: line_num})
         }
     }
 
@@ -124,7 +129,7 @@ pub fn challenge4() -> Result<()> {
         None => expect_true!(false),
         Some(x) => {
             expect_eq!(170, x.line_number, "Message line number")?;
-            expect_eq!("Now that the party is jumping", &x.message)
+            expect_eq!("Now that the party is jumping\n", std::str::from_utf8(&x.buffer)?)
         }
     }
 
@@ -137,14 +142,14 @@ pub fn challenge5() -> Result<()> {
     use common::repeated_xor;
     let cipher = repeated_xor(plain_text, key);
 
-    use common::hex_decode_bytes;
-    let expected_result = hex_decode_bytes(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f")?;
+    use common::hex_string_to_vec_u8;
+    let expected_result = hex_string_to_vec_u8(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f")?;
 
     expect_eq!(expected_result, cipher)
 }
 
 pub fn challenge6() -> Result<()> {
-    use common::{find_key_size, find_single_char_key, repeated_xor, slice_by_byte};
+    use common::{find_key_size, find_best_character_key, repeated_xor, slice_by_byte};
 
     let cipher = base64::read_encoded_file("6.txt")?;
 
@@ -154,7 +159,7 @@ pub fn challenge6() -> Result<()> {
 
     let key: Vec<u8> = sliced_data
         .iter()
-        .map(|x| find_single_char_key(x))
+        .map(|x| find_best_character_key(x))
         .collect();
 
     let tmp = repeated_xor(&cipher, &key);
@@ -190,7 +195,7 @@ pub fn challenge8() -> Result<()> {
     let mut lines_in_ecb_mode: Vec<usize> = Vec::new();
 
     for (line_num, line) in reader.lines().enumerate() {
-        let cipher_text = common::hex_decode_bytes(line?.as_bytes())?;
+        let cipher_text = common::hex_string_to_vec_u8(line?.as_bytes())?;
 
         let ecb_mode = aes::is_cipher_in_ecb_128_mode(&cipher_text);
 
