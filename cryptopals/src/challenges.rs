@@ -1,10 +1,12 @@
 use crate::aes;
 use crate::base64;
 use crate::common;
+#[allow(unused_imports)]
 use crate::expectations::{
     expect_eq_impl, expect_false_impl, expect_true_impl, ExpectationFailure, Result,
 };
 use crate::user_storage;
+#[allow(unused_imports)]
 use crate::{expect_eq, expect_false, expect_true};
 use common::Wrap;
 use rayon::prelude::*;
@@ -32,13 +34,15 @@ pub fn set2() {
 }
 
 pub fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Result<()>) {
+    use std::time::Instant;
+    let timer = Instant::now();
     match challenge() {
         Ok(_) => println!("SUCCESSFUL: Challenge {challenge_number}"),
         Err(error) => {
             println!("FAILED:     Challenge {challenge_number}, {error}\n\n{error:?}");
         }
     }
-    println!("----------");
+    println!("-----{:.2?}-----", timer.elapsed());
 }
 
 /// Converting a string of hex to bytes representing chars, then those chars to base64
@@ -109,7 +113,7 @@ pub fn challenge4() -> Result<()> {
         .max_by(|left, right| left.score.cmp(&right.score))
         .unwrap();
 
-    println!("key: {}", base64::encode_byte(result.key)?); // key is 53, or "1" in base64
+    // println!("key: {}", base64::encode_byte(result.key)?); // key is 53, or "1" in base64
     expect_eq!(
         "Now that the party is jumping\n",
         std::str::from_utf8(&result.plaintext)?
