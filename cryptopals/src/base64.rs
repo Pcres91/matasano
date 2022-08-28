@@ -7,6 +7,7 @@ use bigint::BigUint;
 
 use crate::expect_eq;
 
+/// encodes slice into a base64 String
 pub fn char_bytes_to_base64(bytes: &[u8]) -> Result<String> {
     Ok(encode(bytes)?.into_iter().collect())
 }
@@ -26,6 +27,7 @@ pub fn encode(bytes: &[u8]) -> Result<Vec<char>> {
         .collect()
 }
 
+/// Decode base64-encrypted data into char representation
 pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
     let mut writer = BitWriter::endian(Vec::new(), BigEndian);
 
@@ -40,6 +42,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
     Ok(writer.into_writer())
 }
 
+/// read base64-encoded file into char representation
 pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>> {
     use rayon::prelude::*;
     use std::fs::File;
@@ -84,6 +87,7 @@ pub fn encode_byte(byte: u8) -> Result<char> {
     }
 }
 
+/// same as decode_byte, but using a std::io::Result for iterators using BitWriter
 pub fn decode_byte_io_error(byte: u8) -> std::io::Result<u8> {
     match decode_byte(byte) {
         Ok(res) => Ok(res),
