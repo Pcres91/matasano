@@ -43,18 +43,20 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, Error> {
 }
 
 pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>, Error> {
+    use rayon::prelude::*;
     use std::fs::File;
-    use std::io::{prelude::*, BufReader};
+    use std::io::Read;
 
-    let file = File::open(filepath)?;
-    let reader = BufReader::new(file);
+    let mut file = File::open(filepath)?;
 
-    let mut data: Vec<u8> = Vec::new();
-    for line in reader.lines() {
-        data.extend_from_slice(&decode(line?.as_bytes())?);
-    }
+    let mut entire_file = String::from("");
+    file.read_to_string(&mut entire_file)?;
 
-    Ok(data)
+    Ok(entire_file
+        .par_lines()
+        .map(|line| decode(line.as_bytes()).unwrap())
+        .flatten()
+        .collect())
 }
 
 // this converts base64 to char. If topmost bits aren't 00, returns None

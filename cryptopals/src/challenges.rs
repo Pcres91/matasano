@@ -121,13 +121,12 @@ pub fn challenge4() -> Result<()> {
 }
 
 pub fn challenge5() -> Result<()> {
+    use common::{repeated_xor, hex_string_to_vec_u8};
     let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
     let key = b"ICE";
 
-    use common::repeated_xor;
     let cipher = repeated_xor(plain_text, key);
 
-    use common::hex_string_to_vec_u8;
     let expected_result = hex_string_to_vec_u8(b"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f")?;
 
     expect_eq!(expected_result, cipher)

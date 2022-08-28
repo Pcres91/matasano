@@ -5,6 +5,9 @@ use std::error;
 use std::fmt;
 use std::io::Cursor;
 
+use crate::expectations::expect_eq_impl;
+use crate::expect_eq;
+
 extern crate hex;
 extern crate num_traits;
 
@@ -157,8 +160,8 @@ pub fn find_best_character_key_and_score(cipher: &[u8]) -> ScoredText {
 pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
     fn xor_with_key(chunk: &[u8], key: &[u8]) -> Vec<u8> {
         chunk
-            .iter()
-            .zip(key.iter().cycle())
+            .par_iter()
+            .zip(key.par_iter())
             .map(|(c, key_char)| c ^ key_char)
             .collect()
     }
@@ -169,15 +172,17 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+/// Computes the distance between two strings on a per-bit (not byte) basis
 pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
+    expect_eq!(string1.len(), string2.len(), "Hamming Distance can only be calculated between two strings of equal length")?;
+
     let mut cur1 = Cursor::new(&string1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
     let mut cur2 = Cursor::new(&string2);
     let mut read2 = BitReader::endian(&mut cur2, BigEndian);
 
-    // TODO: functional?
     let mut distance = 0;
-    for _ in 0..(string1.len() * 8) {
+    for _ in 0..(string1.len() * 8 /* per bit, not byte */) {
         let res = read1.read_bit()? ^ read2.read_bit()?;
         if res {
             distance += 1
@@ -217,6 +222,7 @@ pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) 
     Ok(distances[0].1)
 }
 
+/// TODO: what is this? If necessary surely this can be simplified
 fn get_slice(data: &[u8], start: usize, step: usize) -> Vec<u8> {
     let mut slice = vec![];
     let mut idx = start;
@@ -265,4 +271,19 @@ pub fn prefix_with_rnd_bytes(range: (usize, usize), text: &[u8]) -> Vec<u8> {
     res.extend_from_slice(text);
 
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hamming_distance() {
+        let string1 = "this is a test";
+        let string2 = "wokka wokka!!!";
+        
+        let res = hamming_distance(&string1.as_bytes(), &string2.as_bytes()).unwrap();
+
+        assert_eq!(37, res);
+    }
 }
