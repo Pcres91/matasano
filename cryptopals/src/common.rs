@@ -5,8 +5,9 @@ use std::error;
 use std::fmt;
 use std::io::Cursor;
 
-use crate::expectations::expect_eq_impl;
 use crate::expect_eq;
+use crate::expect_true;
+use crate::expectations::{expect_eq_impl, expect_true_impl};
 
 extern crate hex;
 extern crate num_traits;
@@ -140,12 +141,17 @@ pub struct ScoredText {
 
 impl From<(u8, i32, Vec<u8>)> for ScoredText {
     fn from(f: (u8, i32, Vec<u8>)) -> Self {
-        ScoredText { key: f.0, score: f.1, plaintext: f.2 }
-    }   
+        ScoredText {
+            key: f.0,
+            score: f.1,
+            plaintext: f.2,
+        }
+    }
 }
 
 /// same as find_best_character_key, but also return the score.
 /// Returned as (key, score)
+/// TODO use enumerate to store key value
 pub fn find_best_character_key_and_score(cipher: &[u8]) -> ScoredText {
     (0..0xffu8)
         .into_par_iter()
@@ -174,7 +180,11 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
 
 /// Computes the distance between two strings on a per-bit (not byte) basis
 pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
-    expect_eq!(string1.len(), string2.len(), "Hamming Distance can only be calculated between two strings of equal length")?;
+    expect_eq!(
+        string1.len(),
+        string2.len(),
+        "Hamming Distance can only be calculated between two strings of equal length"
+    )?;
 
     let mut cur1 = Cursor::new(&string1);
     let mut read1 = BitReader::endian(&mut cur1, BigEndian);
@@ -182,44 +192,53 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
     let mut read2 = BitReader::endian(&mut cur2, BigEndian);
 
     let mut distance = 0;
-    for _ in 0..(string1.len() * 8 /* per bit, not byte */) {
+    for _ in 0..(string1.len() * 8/* per bit, not byte */) {
         let res = read1.read_bit()? ^ read2.read_bit()?;
         if res {
             distance += 1
         };
     }
-
     Ok(distance)
 }
 
+/// get the average hamming distance between blocks of key_length size, for num_blocks
 pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -> Result<f32> {
-    let mut sum_distances = 0usize;
-    for i in 0..num_blocks {
-        let idx = i * key_length;
-        sum_distances += hamming_distance(
-            &data[idx..(idx + key_length)],
-            &data[(idx + key_length)..(idx + 2 * key_length)],
-        )?;
-    }
+    expect_true!(num_blocks * key_length <= data.len(), format!("Not enough data for the num blocks requested. Data length: {}, num_blocks: {}, key_length: {}",
+        data.len(), num_blocks, key_length).as_str())?;
+
+    let sum_distances = (0..(num_blocks - 1) * key_length)
+        .step_by(key_length)
+        .par_bridge()
+        .fold(
+            || 0usize,
+            |acc, idx| {
+                acc + hamming_distance(
+                    &data[idx..(idx + key_length)],
+                    &data[(idx + key_length)..(idx + 2 * key_length)],
+                )
+                .unwrap()
+            },
+        )
+        .sum::<usize>();
 
     let normalised_distance_sum = sum_distances as f32 / key_length as f32;
     let average_distance = normalised_distance_sum / num_blocks as f32;
     Ok(average_distance)
 }
 
+/// Find the key size with the lowest average hamming distance between each block. Averaged over num_blocks blocks
 pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) -> Result<usize> {
-    let mut distances: Vec<(f32, usize)> = vec![];
-
-    for key_length in key_range.0..=key_range.1 {
-        let distance = get_average_distance(&data, key_length, num_blocks)?;
-
-        distances.push((distance, key_length));
-    }
-
-    distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-    // println!("{:?}", distances);
-    // let distances_only: Vec<usize> = distances.iter().map(|a| a.1).collect();
-    Ok(distances[0].1)
+    Ok((key_range.0..key_range.1)
+        .into_par_iter()
+        .map(|key_length| {
+            (
+                key_length,
+                get_average_distance(&data, key_length, num_blocks).unwrap(),
+            )
+        })
+        .min_by(|left, right| left.1.partial_cmp(&right.1).unwrap())
+        .unwrap()
+        .0)
 }
 
 /// TODO: what is this? If necessary surely this can be simplified
@@ -281,7 +300,7 @@ mod tests {
     fn test_hamming_distance() {
         let string1 = "this is a test";
         let string2 = "wokka wokka!!!";
-        
+
         let res = hamming_distance(&string1.as_bytes(), &string2.as_bytes()).unwrap();
 
         assert_eq!(37, res);

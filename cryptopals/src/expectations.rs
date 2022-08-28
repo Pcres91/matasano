@@ -42,6 +42,9 @@ macro_rules! expect_true {
     ($expected:expr) => {
         expect_true_impl($expected, None)
     };
+    ($expected:expr, $message:expr) => {
+        expect_true_impl($expected, Some($message))
+    }
 }
 
 #[macro_export]
