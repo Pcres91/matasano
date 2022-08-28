@@ -1,4 +1,5 @@
 use crate::aes;
+use crate::aes::Encryptor;
 use crate::base64;
 use crate::common;
 #[allow(unused_imports)]
@@ -121,7 +122,7 @@ pub fn challenge4() -> Result<()> {
 }
 
 pub fn challenge5() -> Result<()> {
-    use common::{repeated_xor, hex_string_to_vec_u8};
+    use common::{hex_string_to_vec_u8, repeated_xor};
     let plain_text = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
     let key = b"ICE";
 
@@ -137,21 +138,24 @@ pub fn challenge6() -> Result<()> {
 
     let cipher = base64::read_encoded_file("6.txt")?;
 
+    // iterate through key sizes, finding the one with the lowest average hamming distance over 20 blocks
     let key_size = find_key_size(&cipher, (2, 40), 20)?;
 
+    // get all the first bytes of each block together, second bytes of each block together, etc
     let sliced_data = slice_by_byte(&cipher, key_size);
 
+    // find the best character key for each slice
     let key: Vec<u8> = sliced_data
         .par_iter()
         .map(|x| find_best_character_key(x))
         .collect();
 
     let tmp = repeated_xor(&cipher, &key);
-    let result = String::from_utf8(tmp)?;
+    let plaintext = String::from_utf8(tmp)?;
 
     let expected = "I'm back and I'm ringin' the bell \nA rockin' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that's my DJ Deshay cuttin' all them Z's \nHittin' hard and the girlies goin' crazy \nVanilla's on the mike, man I'm not lazy. \n\nI'm lettin' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse's to the side yellin', Go Vanilla Go! \n\nSmooth 'cause that's the way I will be \nAnd if you don't give a damn, then \nWhy you starin' at me \nSo get off 'cause I control the stage \nThere's no dissin' allowed \nI'm in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n' play \n\nStage 2 -- Yea the one ya' wanna listen to \nIt's off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI'm an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI'm like Samson -- Samson to Delilah \nThere's no denyin', You can try to hang \nBut you'll keep tryin' to get my style \nOver and over, practice makes perfect \nBut not if you're a loafer. \n\nYou'll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I'm comin' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin' \nVanilla Ice is sellin' and you people are buyin' \n'Cause why the freaks are jockin' like Crazy Glue \nMovin' and groovin' trying to sing along \nAll through the ghetto groovin' this here song \nNow you're amazed by the VIP posse. \n\nSteppin' so hard like a German Nazi \nStartled by the bases hittin' ground \nThere's no trippin' on mine, I'm just gettin' down \nSparkamatic, I'm hangin' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n'89 in my time! You, '90 is my year. \n\nYou're weakenin' fast, YO! and I can tell it \nYour body's gettin' hot, so, so I can smell it \nSo don't be mad and don't be sad \n'Cause the lyrics belong to ICE, You can call me Dad \nYou're pitchin' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don't be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you're dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
 
-    expect_eq!(expected, result.as_str())?;
+    expect_eq!(expected, plaintext.as_str())?;
     expect_eq!("Terminator X: Bring the noise", std::str::from_utf8(&key)?)
 }
 
@@ -159,13 +163,9 @@ pub fn challenge7() -> Result<()> {
     let cipher = base64::read_encoded_file("7.txt")?;
     let expected = "I'm back and I'm ringin' the bell \nA rockin' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that's my DJ Deshay cuttin' all them Z's \nHittin' hard and the girlies goin' crazy \nVanilla's on the mike, man I'm not lazy. \n\nI'm lettin' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse's to the side yellin', Go Vanilla Go! \n\nSmooth 'cause that's the way I will be \nAnd if you don't give a damn, then \nWhy you starin' at me \nSo get off 'cause I control the stage \nThere's no dissin' allowed \nI'm in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n' play \n\nStage 2 -- Yea the one ya' wanna listen to \nIt's off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI'm an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI'm like Samson -- Samson to Delilah \nThere's no denyin', You can try to hang \nBut you'll keep tryin' to get my style \nOver and over, practice makes perfect \nBut not if you're a loafer. \n\nYou'll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I'm comin' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin' \nVanilla Ice is sellin' and you people are buyin' \n'Cause why the freaks are jockin' like Crazy Glue \nMovin' and groovin' trying to sing along \nAll through the ghetto groovin' this here song \nNow you're amazed by the VIP posse. \n\nSteppin' so hard like a German Nazi \nStartled by the bases hittin' ground \nThere's no trippin' on mine, I'm just gettin' down \nSparkamatic, I'm hangin' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n'89 in my time! You, '90 is my year. \n\nYou're weakenin' fast, YO! and I can tell it \nYour body's gettin' hot, so, so I can smell it \nSo don't be mad and don't be sad \n'Cause the lyrics belong to ICE, You can call me Dad \nYou're pitchin' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don't be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you're dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
 
-    let key = b"YELLOW SUBMARINE";
-
-    let plain_text_as_bytes = aes::decrypt_ecb_128(&cipher, key)?;
-
+    let ecb_oracle = aes::Oracle::ecb_with_my_key(b"YELLOW SUBMARINE");
+    let plain_text_as_bytes = ecb_oracle.decrypt(&cipher)?;
     let _plain_text = std::str::from_utf8(&plain_text_as_bytes)?;
-
-    // println!("{_plain_text}");
 
     expect_eq!(expected, _plain_text)
 }
@@ -255,7 +255,6 @@ pub fn challenge12() -> Result<()> {
         }
     }
 
-    use aes::Encryptor;
     impl Encryptor for ConcattorEcbOracle {
         fn encrypt(&self, plain_text: &[u8]) -> aes::Result<Vec<u8>> {
             let mut concatted = plain_text.to_vec();
@@ -387,7 +386,6 @@ pub fn challenge14() -> Result<()> {
         encryptor: Box::new(encrypt_with_rnd_prefix),
         decryptor: Box::new(&aes::decrypt_ecb_128),
     };
-    use aes::Encryptor;
 
     let padding_cipher_block = aes::find_ecb_128_padded_block_cipher(&oracle)?;
 
@@ -546,7 +544,6 @@ pub fn challenge16() -> Result<()> {
         encryptor: Box::new(&encrypt_bacon),
         decryptor: Box::new(&decrypt_bacon),
     };
-    use aes::Encryptor;
 
     let user_data = b"Hello my name is Paul";
     let cipher_text = bacon_oracle.encrypt(&user_data[..])?;

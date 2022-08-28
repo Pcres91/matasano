@@ -119,9 +119,25 @@ impl Oracle {
         }
     }
 
+    pub fn ecb_with_my_key(key: &[u8]) -> Self {
+        Self {
+            key: key.to_vec(),
+            encryptor: Box::new(&encrypt_ecb_128),
+            decryptor: Box::new(&decrypt_ecb_128),
+        }
+    }
+
     pub fn cbc() -> Self {
         Self {
             key: generate_key(),
+            encryptor: Box::new(&encrypt_cbc_128),
+            decryptor: Box::new(&decrypt_cbc_128),
+        }
+    }
+
+    pub fn cbc_with_my_key(key: &[u8]) -> Self {
+        Self {
+            key: key.to_vec(),
             encryptor: Box::new(&encrypt_cbc_128),
             decryptor: Box::new(&decrypt_cbc_128),
         }
@@ -398,6 +414,7 @@ fn decrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// takes the key and performs 11 rounds to expand the key
 fn expand_key(key: &[u8]) -> Result<Vec<u8>> {
     if key.len() != 16 {
         return Err(AesError {
@@ -407,17 +424,17 @@ fn expand_key(key: &[u8]) -> Result<Vec<u8>> {
     }
 
     // get 11-rounds-worth of keys
-    let mut expanded_key = vec![0u8; 176];
+    let mut expanded_key = vec![0u8; 16 * 11];
 
-    // first round key is the key
+    // 0th round key is the key
     expanded_key[..16].clone_from_slice(&key[..16]);
 
     // for rounds 1 -> 10
     for round_num in 1..11 {
-        // get g(last word from prev key)
+        // get g(last_word_from_prev_key)
         let g_word = g(&expanded_key[round_num * 16 - 4..round_num * 16], round_num)?;
 
-        // set first word: XOR previous word with g(first word of previous key)
+        // set first word: XOR previous word with g(first_word_of_previous_key)
         for idx in 0..4 {
             expanded_key[round_num * 16 + idx] =
                 expanded_key[(round_num - 1) * 16 + idx] ^ g_word[idx];
