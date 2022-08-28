@@ -1,39 +1,37 @@
+use crate::expectations::expect_eq_impl;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 use std::io::{Cursor, Error, ErrorKind};
-
 extern crate num_bigint as bigint;
+use crate::expectations::Result;
 use bigint::BigUint;
 
-pub fn char_bytes_to_base64(bytes: &[u8]) -> Result<String, Error> {
+use crate::expect_eq;
+
+pub fn char_bytes_to_base64(bytes: &[u8]) -> Result<String> {
     Ok(encode(bytes)?.into_iter().collect())
 }
 
-pub fn encode(bytes: &[u8]) -> Result<Vec<char>, Error> {
+/// Takes a slice and encodes every 6 bits and encodes into base64
+pub fn encode(bytes: &[u8]) -> Result<Vec<char>> {
     let num_bits = bytes.len() * 8;
+    expect_eq!(0, num_bits % 6)?;
     let num_chars = num_bits / 6;
 
     let mut cursor = Cursor::new(&bytes);
     let mut reader = BitReader::endian(&mut cursor, BigEndian);
-    let mut encoded = vec![];
-    for _i in 0..num_chars {
-        // must be a better way to loop through the length of reader.
-        let c = encode_byte(reader.read::<u8>(6)?)?;
-        encoded.push(c);
-    }
 
-    Ok(encoded)
+    (0..num_chars)
+        .into_iter() // data race reading reader if parallel iter
+        .map(|_| encode_byte(reader.read::<u8>(6)?))
+        .collect()
 }
 
-pub fn decode(data: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
     let mut writer = BitWriter::endian(Vec::new(), BigEndian);
 
-    for &byte in data {
-        if byte as char == '=' {
-            break;
-        } else {
-            writer.write(6, decode_byte(byte)?)?;
-        }
-    }
+    data.iter()
+        .take_while(|byte| !byte.eq_ignore_ascii_case(&('=' as u8)))
+        .try_for_each(|byte| writer.write(6, decode_byte_io_error(*byte)?))?;
 
     // into_writer throws away any incomplete bytes.
     // So, by breaking when the padding '=' is reached,
@@ -42,7 +40,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(writer.into_writer())
 }
 
-pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>, Error> {
+pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>> {
     use rayon::prelude::*;
     use std::fs::File;
     use std::io::Read;
@@ -60,12 +58,13 @@ pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>, Error> {
 }
 
 // this converts base64 to char. If topmost bits aren't 00, returns None
-pub fn encode_byte(byte: u8) -> Result<char, Error> {
+pub fn encode_byte(byte: u8) -> Result<char> {
     if byte > 63 {
         return Err(Error::new(
             ErrorKind::InvalidData,
             "Byte to encode as base64 out of range",
-        ));
+        )
+        .into());
     }
     // capitals
     if byte <= 25 {
@@ -85,8 +84,18 @@ pub fn encode_byte(byte: u8) -> Result<char, Error> {
     }
 }
 
+pub fn decode_byte_io_error(byte: u8) -> std::io::Result<u8> {
+    match decode_byte(byte) {
+        Ok(res) => Ok(res),
+        Err(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Unable to decode char into its base64 representation",
+        )),
+    }
+}
+
 /// Tries to decode a char into its base64 representation.
-pub fn decode_byte(byte: u8) -> Result<u8, Error> {
+pub fn decode_byte(byte: u8) -> Result<u8> {
     // capitals
     if byte >= 65 && byte <= 90 {
         Ok(byte - 65)
@@ -112,7 +121,8 @@ pub fn decode_byte(byte: u8) -> Result<u8, Error> {
         Err(Error::new(
             ErrorKind::InvalidData,
             "Byte to decode from base64 out of range",
-        ))
+        )
+        .into())
     }
 }
 
