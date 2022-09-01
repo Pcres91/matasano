@@ -4,3 +4,4 @@ pub mod challenges;
 pub mod common;
 pub mod expectations;
 pub mod user_storage;
+pub mod errors;

@@ -1,11 +1,9 @@
-use crate::expectations::expect_eq_impl;
+use crate::errors::Result;
+use crate::expectations::expect_eq;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 use std::io::{Cursor, Error, ErrorKind};
 extern crate num_bigint as bigint;
-use crate::expectations::Result;
 use bigint::BigUint;
-
-use crate::expect_eq;
 
 /// encodes slice into a base64 String
 pub fn char_bytes_to_base64(bytes: &[u8]) -> Result<String> {
@@ -15,7 +13,7 @@ pub fn char_bytes_to_base64(bytes: &[u8]) -> Result<String> {
 /// Takes a slice and encodes every 6 bits and encodes into base64
 pub fn encode(bytes: &[u8]) -> Result<Vec<char>> {
     let num_bits = bytes.len() * 8;
-    expect_eq!(0, num_bits % 6)?;
+    expect_eq(0, num_bits % 6, "num bits is a factor of 6")?;
     let num_chars = num_bits / 6;
 
     let mut cursor = Cursor::new(&bytes);

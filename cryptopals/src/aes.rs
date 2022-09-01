@@ -1,99 +1,6 @@
-use std::error::Error;
-use std::fmt;
+use crate::errors::{AesError, AesResult};
 
-pub type Result<T> = anyhow::Result<T, AesError>;
-
-#[derive(Debug, Clone)]
-pub enum ErrorKind {
-    KeyLengthError,
-    CipherTextLengthError,
-    NotPKCS7PaddedError,
-    PKCS7PaddingTooLongError,
-    ExpandedKeyLengthError,
-    Ecb128Error,
-    NotFound,
-    InvalidData,
-    InvalidLength,
-}
-
-#[derive(Debug)]
-pub struct AesError {
-    pub kind: ErrorKind,
-    pub message: Option<String>,
-}
-
-impl AesError {
-    pub fn new(kind: ErrorKind) -> AesError {
-        AesError {
-            kind,
-            message: None,
-        }
-    }
-}
-
-impl Error for AesError {}
-
-impl fmt::Display for AesError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.kind {
-            ErrorKind::KeyLengthError => write!(
-                f,
-                "{}",
-                self.message
-                    .as_deref()
-                    .unwrap_or("the key for ECB 128 encryption must be 16 bytes in length")
-            ),
-            ErrorKind::CipherTextLengthError => write!(
-                f,
-                "{}",
-                self.message
-                    .as_deref()
-                    .unwrap_or("Cipher Text length must be divisible by 16")
-            ),
-            ErrorKind::NotPKCS7PaddedError => write!(
-                f,
-                "{}",
-                self.message
-                    .as_deref()
-                    .unwrap_or("The data is not PKCS7-padded")
-            ),
-            ErrorKind::PKCS7PaddingTooLongError => write!(
-                f,
-                "{}",
-                self.message.as_deref().unwrap_or(
-                    "Maximum block length for PKCS7 padding exceeded. Maximum is 0xff bytes"
-                )
-            ),
-            ErrorKind::ExpandedKeyLengthError => write!(
-                f,
-                "{}",
-                self.message
-                    .as_deref()
-                    .unwrap_or("The Key length once expanded must be ")
-            ),
-            ErrorKind::Ecb128Error => write!(
-                f,
-                "{}",
-                self.message
-                    .as_deref()
-                    .unwrap_or("An error related to ECB 128 has occurred")
-            ),
-            ErrorKind::NotFound => write!(
-                f,
-                "{}",
-                self.message
-                    .as_deref()
-                    .unwrap_or("The Key length once expanded must be ")
-            ),
-            ErrorKind::InvalidData => {
-                write!(f, "{}", self.message.as_deref().unwrap_or("Invalid data"))
-            }
-            ErrorKind::InvalidLength => {
-                write!(f, "{}", self.message.as_deref().unwrap_or("Invalid length"))
-            }
-        }
-    }
-}
+type Result<T> = AesResult<T>;
 
 pub const KNOWN_KEY: [u8; 16] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -152,11 +59,11 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 
 pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     if cipher_text.len() % 16 != 0 {
-        return Err(AesError::new(ErrorKind::CipherTextLengthError));
+        return Err(AesError::CipherTextLengthError);
     }
 
     if key.len() != 16 {
-        return Err(AesError::new(ErrorKind::KeyLengthError));
+        return Err(AesError::KeyLengthError);
     }
 
     let expanded_key = expand_key(key)?;
@@ -197,10 +104,9 @@ pub fn find_ecb_128_padded_block_cipher(oracle: &impl Encryptor) -> Result<Vec<u
         prev_block = &cipher_text[idx..idx + 16];
     }
 
-    Err(AesError {
-        kind: ErrorKind::Ecb128Error,
-        message: Some("Could not find padding ciphertext".to_string()),
-    })
+    Err(AesError::Ecb128Error(String::from(
+        "Could not find padding ciphertext",
+    )))
 }
 
 pub fn encrypt_cbc_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
@@ -343,15 +249,14 @@ pub fn find_block_length(oracle: &impl Encryptor) -> Result<usize> {
         }
     }
 
-    Err(AesError {
-        kind: ErrorKind::NotFound,
-        message: Some("Couldn't find the block length".to_string()),
-    })
+    Err(AesError::NotFound(
+        "Couldn't find the block length".to_string(),
+    ))
 }
 
 fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
-        return Err(AesError::new(ErrorKind::ExpandedKeyLengthError));
+        return Err(AesError::ExpandedKeyLengthError);
     }
 
     apply_key(block, &expanded_key[..16])?;
@@ -371,13 +276,10 @@ fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
 
 fn decrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some(format!(
-                "decrypt_block(): Expanded key must be 176 bytes. Got length {}",
-                expanded_key.len()
-            )),
-        });
+        return Err(AesError::InvalidData(format!(
+            "decrypt_block(): Expanded key must be 176 bytes. Got length {}",
+            expanded_key.len()
+        )));
     }
 
     // must be last four words of the expanded key
@@ -400,10 +302,7 @@ fn decrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
 
 fn expand_key(key: &[u8]) -> Result<Vec<u8>> {
     if key.len() != 16 {
-        return Err(AesError {
-            kind: ErrorKind::KeyLengthError,
-            message: None,
-        });
+        return Err(AesError::KeyLengthError);
     }
 
     // get 11-rounds-worth of keys
@@ -435,10 +334,10 @@ fn expand_key(key: &[u8]) -> Result<Vec<u8>> {
 
 fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>> {
     if word_in.len() != 4 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidLength,
-            message: Some("Word must be 4 bytes".to_string()),
-        });
+        return Err(AesError::InvalidLength(format!(
+            "Word must be 4 bytes, got {}",
+            word_in.len()
+        )));
     }
 
     // rotate bytes left once and substitute from S-box
@@ -456,16 +355,16 @@ fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>> {
 
 fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>> {
     if l.len() != 4 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some(format!("xor_words(): l must be 4 bytes, got {}", l.len())),
-        });
+        return Err(AesError::InvalidData(format!(
+            "xor_words(): l must be 4 bytes, got {}",
+            l.len()
+        )));
     }
     if r.len() != 4 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some(format!("xor_words(): r must be 4 bytes, got {}", r.len())),
-        });
+        return Err(AesError::InvalidData(format!(
+            "xor_words(): r must be 4 bytes, got {}",
+            r.len()
+        )));
     }
 
     Ok(vec![l[0] ^ r[0], l[1] ^ r[1], l[2] ^ r[2], l[3] ^ r[3]])
@@ -473,22 +372,16 @@ fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>> {
 
 fn apply_key(state: &mut [u8], key: &[u8]) -> Result<()> {
     if key.len() != 16 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some(format!(
-                "apply_key(): Key must be 16 bytes. Got {}",
-                key.len()
-            )),
-        });
+        return Err(AesError::InvalidData(format!(
+            "apply_key(): Key must be 16 bytes. Got {}",
+            key.len()
+        )));
     }
     if state.len() != 16 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some(format!(
-                "apply_key(): State must be 16 bytes. Got {}",
-                state.len()
-            )),
-        });
+        return Err(AesError::InvalidData(format!(
+            "apply_key(): State must be 16 bytes. Got {}",
+            state.len()
+        )));
     }
 
     for i in 0..state.len() {
@@ -506,13 +399,10 @@ fn mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
     // could be done with shifting u32s but didn't want
     // to deal with the memory casting
     if state.len() != 16 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some(format!(
-                "mix_and_sub_rows(): state must be 16 bytes in length, got {}",
-                state.len()
-            )),
-        });
+        return Err(AesError::InvalidData(format!(
+            "mix_and_sub_rows(): state must be 16 bytes in length, got {}",
+            state.len()
+        )));
     }
     let tmp = state.to_vec();
 
@@ -545,10 +435,10 @@ fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
     // row 2 rotated right twice
     // row 3 rotated right 3 times
     if state.len() != 16 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some("state must be 16 bytes in length".to_string()),
-        });
+        return Err(AesError::InvalidData(format!(
+            "state must be 16 bytes in length, got {}",
+            state.len()
+        )));
     }
     let tmp = state.to_vec();
 
@@ -577,10 +467,10 @@ fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
 
 fn mix_columns(state: &mut [u8]) -> Result<()> {
     if state.len() != 16 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some("state must be 16 bytes in length".to_string()),
-        });
+        return Err(AesError::InvalidData(format!(
+            "state must be 16 bytes in length, got {}",
+            state.len()
+        )));
     }
     let tmp = state.to_vec();
 
@@ -608,11 +498,12 @@ fn mix_columns(state: &mut [u8]) -> Result<()> {
 
 fn inverse_mix_columns(state: &mut [u8]) -> Result<()> {
     if state.len() != 16 {
-        return Err(AesError {
-            kind: ErrorKind::InvalidData,
-            message: Some("state must be 16 bytes in length".to_string()),
-        });
+        return Err(AesError::InvalidData(format!(
+            "state must be 16 bytes in length, got {}",
+            state.len()
+        )));
     }
+
     let tmp = state.to_vec();
 
     for i in 0..(state.len() / 4) {
@@ -821,7 +712,7 @@ pub fn pkcs7_pad(message: &mut Vec<u8>, block_byte_length: usize) -> Result<()> 
         num_padded_bytes = block_byte_length;
     }
     if num_padded_bytes > 0xff {
-        return Err(AesError::new(ErrorKind::PKCS7PaddingTooLongError));
+        return Err(AesError::PKCS7PaddingTooLongError);
     }
 
     // pad with bytes of the length of padding
@@ -845,7 +736,7 @@ pub fn remove_pkcs7_padding(message: &[u8]) -> Result<Vec<u8>> {
     }
 
     if !pkcs7_padded {
-        return Err(AesError::new(ErrorKind::NotPKCS7PaddedError));
+        return Err(AesError::NotPKCS7PaddedError);
     }
 
     Ok(message[..message.len() - last_val as usize].to_vec())
