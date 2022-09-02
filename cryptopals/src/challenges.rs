@@ -193,6 +193,7 @@ pub fn challenge8() -> Result<()> {
     }
 
     expect_false(
+        // TODO: lines_in_ecb_mode.len() == 4
         lines_in_ecb_mode.is_empty(),
         "Detecting lines in a file that are ecb128-encrypted",
     )
