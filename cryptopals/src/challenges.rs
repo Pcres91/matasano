@@ -262,7 +262,6 @@ pub fn challenge12() -> Result<()> {
         }
     }
 
-    use aes::Encryptor;
     use errors::AesResult;
     impl Encryptor for ConcattorEcbOracle {
         fn encrypt(&self, plain_text: &[u8]) -> AesResult<Vec<u8>> {
