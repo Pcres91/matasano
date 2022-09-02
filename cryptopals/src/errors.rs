@@ -1,5 +1,6 @@
 use hex::FromHexError;
 use thiserror::Error;
+use std::string::FromUtf8Error;
 
 pub type Result<T> = std::result::Result<T, CryptoError>;
 pub type AesResult<T> = std::result::Result<T, AesError>;
@@ -8,6 +9,8 @@ pub type AesResult<T> = std::result::Result<T, AesError>;
 pub enum CryptoError {
     #[error("AesError encountered.")]
     AesError(#[from] AesError),
+    #[error("UserStorageError encountered.")]
+    UserStorageError(#[from] UserStorageError),
     #[error("HexError encountered.")]
     HexError(#[from] FromHexError),
     #[error("IoError encountered.")]
@@ -46,4 +49,12 @@ pub enum AesError {
     InvalidData(String),
     #[error("Invalid length: {0}")]
     InvalidLength(String),
+    #[error("FromUtf8Error encountered.")]
+    FromUtf8Error(#[from] FromUtf8Error),
+}
+
+#[derive(Debug, Error)]
+pub enum UserStorageError {
+    #[error("Invalid email format")]
+    InvalidEmailFormat,
 }

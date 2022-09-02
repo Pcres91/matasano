@@ -16,16 +16,20 @@ where
     }
 }
 
-pub fn expect_true(expected: bool, message: String) -> Result<()> {
+pub fn expect_true(expected: bool, message: &str) -> Result<()> {
     match expected {
         true => Ok(()),
-        false => Err(CryptoError::ExpectTrueFailure { message: message }),
+        false => Err(CryptoError::ExpectTrueFailure {
+            message: message.to_string(),
+        }),
     }
 }
 
-pub fn expect_false(expected: bool, message: String) -> Result<()> {
+pub fn expect_false(expected: bool, message: &str) -> Result<()> {
     match expected {
-        true => Ok(()),
-        false => Err(CryptoError::ExpectFalseFailure { message: message }),
+        false => Ok(()),
+        true => Err(CryptoError::ExpectFalseFailure {
+            message: message.to_string(),
+        }),
     }
 }

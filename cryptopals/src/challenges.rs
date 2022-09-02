@@ -1,6 +1,8 @@
 use crate::aes;
 use crate::base64;
 use crate::common;
+use crate::errors;
+use crate::errors::AesError;
 use crate::errors::Result;
 #[allow(unused_imports)]
 use crate::expectations::{expect_eq, expect_false, expect_true};
@@ -145,12 +147,16 @@ pub fn challenge6() -> Result<()> {
         .collect();
 
     let tmp = repeated_xor(&cipher, &key);
-    let result = String::from_utf8(tmp)?;
+    let result = std::str::from_utf8(&tmp)?;
 
     let expected = "I'm back and I'm ringin' the bell \nA rockin' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that's my DJ Deshay cuttin' all them Z's \nHittin' hard and the girlies goin' crazy \nVanilla's on the mike, man I'm not lazy. \n\nI'm lettin' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse's to the side yellin', Go Vanilla Go! \n\nSmooth 'cause that's the way I will be \nAnd if you don't give a damn, then \nWhy you starin' at me \nSo get off 'cause I control the stage \nThere's no dissin' allowed \nI'm in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n' play \n\nStage 2 -- Yea the one ya' wanna listen to \nIt's off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI'm an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI'm like Samson -- Samson to Delilah \nThere's no denyin', You can try to hang \nBut you'll keep tryin' to get my style \nOver and over, practice makes perfect \nBut not if you're a loafer. \n\nYou'll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I'm comin' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin' \nVanilla Ice is sellin' and you people are buyin' \n'Cause why the freaks are jockin' like Crazy Glue \nMovin' and groovin' trying to sing along \nAll through the ghetto groovin' this here song \nNow you're amazed by the VIP posse. \n\nSteppin' so hard like a German Nazi \nStartled by the bases hittin' ground \nThere's no trippin' on mine, I'm just gettin' down \nSparkamatic, I'm hangin' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n'89 in my time! You, '90 is my year. \n\nYou're weakenin' fast, YO! and I can tell it \nYour body's gettin' hot, so, so I can smell it \nSo don't be mad and don't be sad \n'Cause the lyrics belong to ICE, You can call me Dad \nYou're pitchin' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don't be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you're dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
 
-    expect_eq(expected, result.as_str(), "")?;
-    expect_eq("Terminator X: Bring the noise", std::str::from_utf8(&key)?, "")
+    expect_eq(expected, result, "")?;
+    expect_eq(
+        "Terminator X: Bring the noise",
+        std::str::from_utf8(&key)?,
+        "",
+    )
 }
 
 pub fn challenge7() -> Result<()> {
@@ -180,14 +186,16 @@ pub fn challenge8() -> Result<()> {
     for (line_num, line) in reader.lines().enumerate() {
         let cipher_text = common::hex_string_to_vec_u8(line?.as_bytes())?;
 
-        let ecb_mode = aes::is_cipher_in_ecb_128_mode(&cipher_text);
-
-        if ecb_mode {
-            lines_in_ecb_mode.push(line_num);
+        match aes::is_cipher_in_ecb_128_mode(&cipher_text) {
+            true => lines_in_ecb_mode.push(line_num),
+            false => (),
         }
     }
 
-    expect_false!(lines_in_ecb_mode.is_empty(), "")
+    expect_false(
+        lines_in_ecb_mode.is_empty(),
+        "Detecting lines in a file that are ecb128-encrypted",
+    )
 }
 
 pub fn challenge9() -> Result<()> {
@@ -254,7 +262,7 @@ pub fn challenge12() -> Result<()> {
     }
 
     use aes::Encryptor;
-    use crate::errors::{AesResult, AesError};
+    use errors::AesResult;
     impl Encryptor for ConcattorEcbOracle {
         fn encrypt(&self, plain_text: &[u8]) -> AesResult<Vec<u8>> {
             let mut concatted = plain_text.to_vec();
@@ -274,17 +282,15 @@ pub fn challenge12() -> Result<()> {
     // find block size
     let block_size = aes::find_block_length(&oracle)?;
 
-    expect_eq(16, block_size, "Breaking aes-ecb-128")
-    }
+    expect_eq(16, block_size, "Breaking aes-ecb-128")?;
 
     // find whether it's in ecb 128 mode
     let in_ecb_mode = aes::is_cipher_in_ecb_128_mode(&oracle.encrypt(&vec![b'a'; block_size * 5])?);
 
     if !in_ecb_mode {
-        return Err(aes::AesError {
-            kind: aes::ErrorKind::InvalidData,
-            message: Some("Could not assert that the data is aes-ecb-128 encrypted".to_string()),
-        }
+        return Err(AesError::InvalidData(
+            "Could not assert that the data is aes-ecb-128 encrypted".to_string(),
+        )
         .into());
     }
 
@@ -323,7 +329,7 @@ pub fn challenge12() -> Result<()> {
     }
 
     // print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
-    expect_eq(expected, std::str::from_utf8(&result)?)
+    expect_eq(expected, std::str::from_utf8(&result)?, "")
 }
 
 pub fn challenge13() -> Result<()> {
@@ -370,7 +376,7 @@ pub fn challenge13() -> Result<()> {
 pub fn challenge14() -> Result<()> {
     let string_to_find = "Let's see if we can decipher this";
 
-    let encrypt_with_rnd_prefix = |plain_text: &[u8], key: &[u8]| -> aes::Result<Vec<u8>> {
+    let encrypt_with_rnd_prefix = |plain_text: &[u8], key: &[u8]| -> errors::AesResult<Vec<u8>> {
         use common::prefix_with_rnd_bytes;
         let rnd_bytes_range = (0, 50);
         let text = prefix_with_rnd_bytes(rnd_bytes_range, &plain_text);
@@ -473,17 +479,13 @@ pub fn challenge14() -> Result<()> {
     )
 }
 
-#[allow(unused_assignments)]
 pub fn challenge15() -> Result<()> {
     let mut message = vec![0u8; 12];
     message.extend_from_slice(&[4u8; 4]);
 
     let res = aes::remove_pkcs7_padding(&message)?;
 
-    match expect_eq(message.len() - 4, res.len()) {
-        Ok(()) => (),
-        Err(err) => return Err(err),
-    }
+    expect_eq(message.len() - 4, res.len(), "Message length")?;
 
     let mut message2 = vec![0u8; 12];
     message2.extend_from_slice(&[4u8; 2]);
@@ -491,46 +493,47 @@ pub fn challenge15() -> Result<()> {
     let original_length2 = message2.len();
 
     match aes::remove_pkcs7_padding(&message2) {
-        Ok(_) => Err(ExpectationFailure.into()),
-        Err(_) => expect_eq(original_length2, message2.len()),
+        Ok(_) => Err(AesError::InvalidData(format!("Unexpected padding at end of message")).into()),
+        Err(_) => expect_eq(
+            original_length2,
+            message2.len(),
+            "Testing Function to remove padding",
+        ),
     }
-
-    // print_challenge_result(15, challenge_success, Some("Testing Function to remove padding"));
 }
 
 pub fn challenge16() -> Result<()> {
-    fn baconise(user_data: &[u8]) -> aes::Result<Vec<u8>> {
+    use crate::errors::*;
+    fn baconise(user_data: &[u8]) -> AesResult<Vec<u8>> {
         let mut res = b"comment1=cooking%20MCs;userdata=".to_vec();
 
-        let mut safe_data = match std::str::from_utf8(user_data) {
-            Ok(text) => String::from(text),
-            Err(_) => return Err(aes::AesError::new(aes::ErrorKind::InvalidData)),
-        };
-        safe_data = safe_data.replace(';', " ");
-        safe_data = safe_data.replace('=', " ");
+        let safe_data: String = user_data
+            .into_par_iter()
+            .map(|c| match *c as char {
+                ';' => ' ',
+                '=' => ' ',
+                _ => *c as char,
+            })
+            .collect();
 
         res.extend_from_slice(&safe_data.as_bytes());
         res.extend_from_slice(b";comment2=%20like%20a%20pound%20of%20bacon");
         Ok(res)
     }
 
-    fn encrypt_bacon(plain_text: &[u8], key: &[u8]) -> aes::Result<Vec<u8>> {
+    fn encrypt_bacon(plain_text: &[u8], key: &[u8]) -> AesResult<Vec<u8>> {
         let baconised_text = baconise(plain_text)?;
         aes::encrypt_cbc_128(&baconised_text, key)
     }
 
-    fn decrypt_bacon(cipher_text: &[u8], key: &[u8]) -> aes::Result<Vec<u8>> {
+    fn decrypt_bacon(cipher_text: &[u8], key: &[u8]) -> AesResult<Vec<u8>> {
         aes::decrypt_cbc_128(cipher_text, key)
     }
 
     impl aes::Oracle {
-        pub fn find_bacon(&self, cipher_text: &[u8]) -> aes::Result<bool> {
-            let res = &self.decrypt(cipher_text)?;
-            let decrypted = std::str::from_utf8(&res);
-            let plain_text = match decrypted {
-                Ok(text) => String::from(text),
-                Err(_) => return Err(aes::AesError::new(aes::ErrorKind::InvalidData)),
-            };
+        pub fn find_bacon(&self, cipher_text: &[u8]) -> AesResult<bool> {
+            let res = self.decrypt(cipher_text)?;
+            let plain_text = String::from_utf8(res)?;
 
             Ok(plain_text.contains(";admin=true;"))
         }

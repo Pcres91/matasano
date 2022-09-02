@@ -185,7 +185,7 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
 /// get the average hamming distance between blocks of key_length size, for num_blocks
 pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -> Result<f32> {
     expect_true(num_blocks * key_length <= data.len(), format!("Not enough data for the num blocks requested. Data length: {}, num_blocks: {}, key_length: {}",
-        data.len(), num_blocks, key_length))?;
+        data.len(), num_blocks, key_length).as_str())?;
 
     let sum_distances = (0..(num_blocks - 1) * key_length)
         .step_by(key_length)

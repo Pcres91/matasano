@@ -1,22 +1,6 @@
 use crate::aes;
-use crate::expect_eq;
-use crate::expect_true;
-use crate::expectations::{expect_eq_impl, expect_true_impl};
-use std::error;
-use std::fmt;
-
-type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
-
-#[derive(Debug, Clone)]
-struct InvalidEmail;
-
-impl fmt::Display for InvalidEmail {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Invalid email format")
-    }
-}
-
-impl error::Error for InvalidEmail {}
+use crate::errors::{Result, UserStorageError};
+use crate::expectations::{expect_eq, expect_true};
 
 pub static mut PROFILE_STORAGE: ProfileStorage = ProfileStorage {
     profiles: Vec::new(),
@@ -66,13 +50,16 @@ pub struct Profile {
 pub fn parse_cookie(cookie: &str) -> Result<Profile> {
     let tokens: Vec<&str> = cookie.split(&['=', '&'][..]).collect();
 
-    expect_eq!(6, tokens.len())?;
+    expect_eq(6, tokens.len(), "token length")?;
 
-    expect_eq!("email", tokens[0])?;
-    expect_true!(tokens[1].contains('@'))?;
-    expect_eq!("uid", tokens[2])?;
-    expect_eq!("role", tokens[4])?;
-    expect_true!(tokens[5] == "Admin" || tokens[5] == "User")?;
+    expect_eq("email", tokens[0], "token positional check")?;
+    expect_true(tokens[1].contains('@'), "token positional check")?;
+    expect_eq("uid", tokens[2], "token positional check")?;
+    expect_eq("role", tokens[4], "token positional check")?;
+    expect_true(
+        tokens[5] == "Admin" || tokens[5] == "User",
+        "token positional check",
+    )?;
 
     let new_role = if tokens[5] == "Admin" {
         ProfileRole::Admin
@@ -92,7 +79,7 @@ pub fn parse_cookie(cookie: &str) -> Result<Profile> {
 /// TODO: Safety
 pub unsafe fn create_hash_profile_for(email: &str) -> Result<Vec<u8>> {
     if email.contains('&') || email.contains('=') {
-        return Err(InvalidEmail.into());
+        return Err(UserStorageError::InvalidEmailFormat.into());
     }
 
     let output = format!(
