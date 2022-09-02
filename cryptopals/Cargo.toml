@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 hex = "0.4"
-anyhow = "1.0"
+thiserror = "1.0.33"
 num-bigint = "0.4.3"
 num-traits = "0.2.10"
 bitstream-io = "1.5.0"

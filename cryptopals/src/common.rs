@@ -1,29 +1,12 @@
+use crate::errors::Result;
+use crate::expectations::{expect_eq, expect_true};
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 use rayon::prelude::*;
 use std::collections::BTreeMap;
-use std::error;
 use std::fmt;
 use std::io::Cursor;
-
-use crate::expect_eq;
-use crate::expect_true;
-use crate::expectations::{expect_eq_impl, expect_true_impl};
-
 extern crate hex;
 extern crate num_traits;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-#[derive(Debug, Clone)]
-pub struct InvalidData;
-
-impl error::Error for InvalidData {}
-
-impl fmt::Display for InvalidData {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Data was invalid")
-    }
-}
 
 pub struct Wrap(pub Vec<u8>);
 
@@ -46,9 +29,7 @@ pub fn hex_string_to_vec_u8(bytes: &[u8]) -> Result<Vec<u8>> {
 }
 
 pub fn xor_bytes(left: &[u8], right: &[u8]) -> Result<Vec<u8>> {
-    if left.len() != right.len() {
-        return Err(InvalidData.into());
-    }
+    expect_eq(left.len(), right.len(), "Lengths of the two slices to xor")?;
 
     let mut res: Vec<u8> = Vec::new();
 
@@ -180,10 +161,10 @@ pub fn repeated_xor(text: &[u8], key: &[u8]) -> Vec<u8> {
 
 /// Computes the distance between two strings on a per-bit (not byte) basis
 pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
-    expect_eq!(
+    expect_eq(
         string1.len(),
         string2.len(),
-        "Hamming Distance can only be calculated between two strings of equal length"
+        "Hamming Distance can only be calculated between two strings of equal length",
     )?;
 
     let mut cur1 = Cursor::new(&string1);
@@ -203,7 +184,7 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
 
 /// get the average hamming distance between blocks of key_length size, for num_blocks
 pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -> Result<f32> {
-    expect_true!(num_blocks * key_length <= data.len(), format!("Not enough data for the num blocks requested. Data length: {}, num_blocks: {}, key_length: {}",
+    expect_true(num_blocks * key_length <= data.len(), format!("Not enough data for the num blocks requested. Data length: {}, num_blocks: {}, key_length: {}",
         data.len(), num_blocks, key_length).as_str())?;
 
     let sum_distances = (0..(num_blocks - 1) * key_length)
