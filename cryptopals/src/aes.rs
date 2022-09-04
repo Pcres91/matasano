@@ -63,14 +63,14 @@ impl Encryptor for Oracle {
 pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
 
-    let mut blocks: Vec<u8> = plain_text.to_vec();
-    pkcs7_pad(&mut blocks, 16)?;
+    let block_byte_length = 16usize;
 
-    for idx in (0..blocks.len() as usize).step_by(16) {
-        encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
-    }
+    let blocks = pkcs7_pad(plain_text, block_byte_length)?;
 
-    Ok(blocks)
+    Ok((blocks).chunks_exact(16)
+        .flat_map(|block| encrypt_block_128(block, &expanded_key))
+        .flatten()
+        .collect())
 }
 
 pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
@@ -96,6 +96,7 @@ pub fn is_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
     use std::collections::hash_set::HashSet;
 
     let mut set: HashSet<Vec<u8>> = HashSet::new();
+    // TODO functional
     for idx in (0..cipher_text.len()).step_by(16) {
         set.insert(cipher_text[idx..idx + 16].to_vec());
     }
@@ -134,7 +135,7 @@ pub fn encrypt_cbc_128_with_iv(plain_text: &[u8], key: &[u8], iv: &[u8]) -> Resu
     let expanded_key = expand_key(key)?;
 
     let mut blocks: Vec<u8> = plain_text.to_vec();
-    pkcs7_pad(&mut blocks, 16)?;
+    pkcs7_pad_inplace(&mut blocks, 16)?;
 
     let mut prev_block = iv.to_vec();
 
@@ -143,7 +144,7 @@ pub fn encrypt_cbc_128_with_iv(plain_text: &[u8], key: &[u8], iv: &[u8]) -> Resu
             blocks[idx + j] ^= prev_block[j];
         }
 
-        encrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
+        encrypt_block_128_inplace(&mut blocks[idx..idx + 16], &expanded_key)?;
 
         prev_block = blocks[idx..idx + 16].to_vec();
     }
@@ -270,7 +271,29 @@ pub fn find_block_length(oracle: &impl Encryptor) -> Result<usize> {
     ))
 }
 
-fn encrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
+fn encrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
+    if expanded_key.len() != 176 {
+        return Err(AesError::ExpandedKeyLengthError);
+    }
+
+    let mut cipher = block.to_vec();
+
+    apply_key(&mut cipher, &expanded_key[..16])?;
+
+    for round in 1..10 {
+        mix_and_sub_rows(&mut cipher)?;
+        mix_columns(&mut cipher)?;
+        apply_key(&mut cipher, &expanded_key[round * 16..round * 16 + 16])?;
+    }
+
+    //last round, no mix columns
+    mix_and_sub_rows(&mut cipher)?;
+    apply_key(&mut cipher, &expanded_key[10 * 16..10 * 16 + 16])?;
+
+    Ok(cipher)
+}
+
+fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }
@@ -721,7 +744,27 @@ pub const SMART_ASCII: [u8; 255] = [
     251, 252, 253, 254, 255,
 ];
 
-pub fn pkcs7_pad(message: &mut Vec<u8>, block_byte_length: usize) -> Result<()> {
+pub fn pkcs7_pad(plain_text: &[u8], block_byte_length: usize) -> Result<Vec<u8>> {
+    let final_block_len = plain_text.len() % block_byte_length;
+
+    let mut blocks = plain_text.to_vec();
+
+    let mut bytes_to_pad_length = block_byte_length - final_block_len;
+    if bytes_to_pad_length == 0 {
+        bytes_to_pad_length = block_byte_length;
+    }
+    if bytes_to_pad_length > 0xff {
+        return Err(AesError::PKCS7PaddingTooLongError);
+    }
+
+    // pad with bytes of the length of padding
+    let padding = vec![bytes_to_pad_length as u8; bytes_to_pad_length];
+
+    blocks.extend_from_slice(&padding);
+    Ok(blocks)
+}
+
+pub fn pkcs7_pad_inplace(message: &mut Vec<u8>, block_byte_length: usize) -> Result<()> {
     let final_block_len = message.len() % block_byte_length;
 
     let mut num_padded_bytes = block_byte_length - final_block_len;
@@ -783,7 +826,7 @@ mod tests {
         let block_size = 16;
         let mut block = vec![0u8; block_size];
         let copy = block.clone();
-        pkcs7_pad(&mut block, block_size).unwrap();
+        pkcs7_pad_inplace(&mut block, block_size).unwrap();
 
         assert_eq!(copy.len() + block_size, block.len());
     }
@@ -809,8 +852,30 @@ mod tests {
         let original_length = message.len();
 
         match remove_pkcs7_padding(&message) {
-            Ok(_) => assert_eq!(true, false),
+            Ok(_) => assert!(false),
             Err(_) => assert_eq!(original_length, message.len()),
         };
+    }
+
+    #[test]
+    fn test_ecb_128_encryption() {
+        let plain_text = b"hello world";
+
+        let cipher_text = encrypt_ecb_128(plain_text, &KNOWN_KEY).unwrap();
+
+        let decrypted = decrypt_ecb_128(&cipher_text, &KNOWN_KEY).unwrap();
+
+        assert_eq!(plain_text.to_vec(), decrypted);
+    }
+
+    #[test]
+    fn test_cbc_128_encryption() {
+        let plain_text = b"Hello World!";
+
+        let cipher_text = encrypt_cbc_128(plain_text, &KNOWN_KEY).unwrap();
+
+        let decrypted = decrypt_cbc_128(&cipher_text, &KNOWN_KEY).unwrap();
+
+        assert_eq!(String::from_utf8(plain_text.to_vec()), String::from_utf8(decrypted));
     }
 }
