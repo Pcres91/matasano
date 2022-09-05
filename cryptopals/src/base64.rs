@@ -1,7 +1,7 @@
 use crate::errors::{CryptoError, Result};
 use crate::expectations::expect_eq;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
-use std::io::{Cursor, Error, ErrorKind};
+use std::io::Cursor;
 extern crate num_bigint as bigint;
 use bigint::BigUint;
 
