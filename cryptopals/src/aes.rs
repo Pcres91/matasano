@@ -1,4 +1,6 @@
 use crate::errors::{AesError, AesResult};
+use rayon::prelude::*;
+use std::convert::TryInto;
 
 type Result<T> = AesResult<T>;
 
@@ -67,7 +69,8 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 
     let blocks = pkcs7_pad(plain_text, block_byte_length)?;
 
-    Ok((blocks).chunks_exact(16)
+    Ok((blocks)
+        .chunks_exact(16)
         .flat_map(|block| encrypt_block_128(block, &expanded_key))
         .flatten()
         .collect())
@@ -92,17 +95,19 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     remove_pkcs7_padding(&blocks)
 }
 
-pub fn is_cipher_in_ecb_128_mode(cipher_text: &[u8]) -> bool {
+/// ECB128 is stateless and deterministic. That is, the cipher will always be the same for a block
+/// of 16 bytes. So, this test finds if there are any blocks that are identical to each other in a
+/// text. If so, odds are it has been ECB 128 encrypted
+pub fn is_data_ecb128_encrypted(data: &[u8]) -> bool {
     use std::collections::hash_set::HashSet;
 
-    let mut set: HashSet<Vec<u8>> = HashSet::new();
-    // TODO functional
-    for idx in (0..cipher_text.len()).step_by(16) {
-        set.insert(cipher_text[idx..idx + 16].to_vec());
-    }
+    let set: HashSet<[u8; 16]> = data
+        .par_chunks_exact(16)
+        .map(|x| x.try_into().unwrap()) // we know the op will succeed
+        .collect();
     let num_unique_blocks = set.len();
 
-    let num_blocks = cipher_text.len() / 16;
+    let num_blocks = data.len() / 16;
 
     num_blocks - num_unique_blocks > 1
 }
@@ -121,8 +126,8 @@ pub fn find_ecb_128_padded_block_cipher(oracle: &impl Encryptor) -> Result<Vec<u
         prev_block = &cipher_text[idx..idx + 16];
     }
 
-    Err(AesError::Ecb128Error(String::from(
-        "Could not find padding ciphertext",
+    Err(AesError::Ecb128Error(format!(
+        "Could not find padding ciphertext"
     )))
 }
 
@@ -244,7 +249,7 @@ pub fn rnd_encryption_oracle(plain_text: &[u8]) -> Result<(Vec<u8>, bool)> {
 pub fn decryption_oracle(encryptor: &dyn Fn(&[u8]) -> Result<(Vec<u8>, bool)>) -> Result<bool> {
     let plain_text = [b'a'; 16 * 5];
     let (cipher_text, in_ecb_mode) = encryptor(&plain_text)?;
-    let detected_ecb = is_cipher_in_ecb_128_mode(&cipher_text);
+    let detected_ecb = is_data_ecb128_encrypted(&cipher_text);
 
     Ok(detected_ecb == in_ecb_mode)
 }
@@ -876,6 +881,9 @@ mod aes_tests {
 
         let decrypted = decrypt_cbc_128(&cipher_text, &KNOWN_KEY).unwrap();
 
-        assert_eq!(String::from_utf8(plain_text.to_vec()), String::from_utf8(decrypted));
+        assert_eq!(
+            String::from_utf8(plain_text.to_vec()),
+            String::from_utf8(decrypted)
+        );
     }
 }

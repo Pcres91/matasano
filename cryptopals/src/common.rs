@@ -177,38 +177,42 @@ pub fn hamming_distance(string1: &[u8], string2: &[u8]) -> Result<usize> {
 }
 
 /// get the average hamming distance between blocks of key_length size, for num_blocks
-pub fn get_average_distance(data: &[u8], key_length: usize, num_blocks: usize) -> Result<f32> {
-    expect_true(num_blocks * key_length <= data.len(), format!("Not enough data for the num blocks requested. Data length: {}, num_blocks: {}, key_length: {}",
-        data.len(), num_blocks, key_length).as_str())?;
+pub fn get_average_distance(data: &[u8], key_size: usize, num_blocks: usize) -> Result<f32> {
+    expect_true(num_blocks * key_size <= data.len(), format!("Not enough data for the num blocks requested. Data length: {}, num_blocks: {}, key_length: {}",
+        data.len(), num_blocks, key_size).as_str())?;
 
-    let sum_distances = (0..(num_blocks - 1) * key_length)
-        .step_by(key_length)
+    let sum_distances = (0..(num_blocks - 1) * key_size)
+        .step_by(key_size)
         .par_bridge()
         .fold(
             || 0usize,
             |acc, idx| {
                 acc + hamming_distance(
-                    &data[idx..(idx + key_length)],
-                    &data[(idx + key_length)..(idx + 2 * key_length)],
+                    &data[idx..(idx + key_size)],
+                    &data[(idx + key_size)..(idx + 2 * key_size)],
                 )
                 .unwrap()
             },
         )
         .sum::<usize>();
 
-    let normalised_distance_sum = sum_distances as f32 / key_length as f32;
+    let normalised_distance_sum = sum_distances as f32 / key_size as f32;
     let average_distance = normalised_distance_sum / num_blocks as f32;
     Ok(average_distance)
 }
 
 /// Find the key size with the lowest average hamming distance between each block. Averaged over num_blocks blocks
-pub fn find_key_size(data: &[u8], key_range: (usize, usize), num_blocks: usize) -> Result<usize> {
-    Ok((key_range.0..key_range.1)
+pub fn find_key_size(
+    data: &[u8],
+    key_size_range: (usize, usize),
+    num_blocks: usize,
+) -> Result<usize> {
+    Ok((key_size_range.0..key_size_range.1)
         .into_par_iter()
-        .map(|key_length| {
+        .map(|key_size| {
             (
-                key_length,
-                get_average_distance(&data, key_length, num_blocks).unwrap(),
+                key_size,
+                get_average_distance(&data, key_size, num_blocks).unwrap(),
             )
         })
         .min_by(|left, right| left.1.partial_cmp(&right.1).unwrap())

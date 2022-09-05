@@ -206,7 +206,7 @@ pub fn challenge8() -> Result<()> {
             )
         })
         .filter(|(_, line)| line.is_ok())
-        .filter(|(_, line)| aes::is_cipher_in_ecb_128_mode(line.as_deref().unwrap()))
+        .filter(|(_, line)| aes::is_data_ecb128_encrypted(line.as_deref().unwrap()))
         .map(|(line_num, _)| line_num)
         .collect();
 
@@ -308,7 +308,7 @@ pub fn challenge12() -> Result<()> {
     expect_eq(16, block_size, "Breaking aes-ecb-128")?;
 
     // find whether it's in ecb 128 mode
-    let in_ecb_mode = aes::is_cipher_in_ecb_128_mode(&oracle.encrypt(&vec![b'a'; block_size * 5])?);
+    let in_ecb_mode = aes::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?);
 
     if !in_ecb_mode {
         return Err(AesError::InvalidData(
