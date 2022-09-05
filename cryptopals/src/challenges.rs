@@ -1,5 +1,3 @@
-use std::io::BufReader;
-
 use crate::aes;
 use crate::aes::Encryptor;
 use crate::base64;
@@ -11,6 +9,7 @@ use crate::expectations::{expect_eq, expect_false, expect_true};
 use crate::user_storage;
 use common::Wrap;
 use rayon::prelude::*;
+use std::io::BufReader;
 
 pub fn set1() {
     print_challenge_result(1, &challenge1);
