@@ -63,13 +63,7 @@ pub fn xor_bits(left: &[u8], right: &[u8]) -> Vec<u8> {
 
 /// XOR each character in a buffer with a single character key.
 pub fn single_byte_xor(cipher: &[u8], key: u8) -> Vec<u8> {
-    let mut res = Vec::new();
-
-    for message_byte in cipher {
-        res.push(message_byte ^ key);
-    }
-
-    res
+    cipher.par_iter().map(|byte| byte ^ key).collect()
 }
 
 #[allow(dead_code)]
@@ -235,13 +229,9 @@ fn get_slice(data: &[u8], start: usize, step: usize) -> Vec<u8> {
 }
 
 pub fn slice_by_byte(data: &[u8], key_size: usize) -> Vec<Vec<u8>> {
-    let mut sliced_data = Vec::new();
-
-    for key_idx in 0..key_size {
-        sliced_data.push(get_slice(data, key_idx, key_size));
-    }
-
-    sliced_data
+    (0..key_size)
+        .map(|key| get_slice(data, key, key_size))
+        .collect()
 }
 
 #[allow(dead_code)]

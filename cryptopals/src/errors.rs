@@ -17,6 +17,8 @@ pub enum CryptoError {
     IoError(#[from] std::io::Error),
     #[error("Utf8Error encountered.")]
     Utf8Error(#[from] std::str::Utf8Error),
+    #[error("Invalid Data: {0}")]
+    InvalidDataError(String),
     #[error("Expected {expected}, got {actual}. {message}")]
     ExpectEqualFailure {
         expected: String,

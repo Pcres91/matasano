@@ -1,10 +1,11 @@
+use std::io::BufReader;
+
 use crate::aes;
 use crate::aes::Encryptor;
 use crate::base64;
 use crate::common;
 use crate::errors;
-use crate::errors::AesError;
-use crate::errors::Result;
+use crate::errors::{AesError, Result};
 #[allow(unused_imports)]
 use crate::expectations::{expect_eq, expect_false, expect_true};
 use crate::user_storage;
@@ -101,19 +102,31 @@ pub fn challenge4() -> Result<()> {
     use std::fs::File;
     use std::io::prelude::*;
 
-    let mut entire_file = String::from("");
+    let file = File::open("4.txt")?;
+    let reader = BufReader::new(file);
 
-    let mut file = File::open("4.txt")?;
-    file.read_to_string(&mut entire_file)?;
-
-    let result = entire_file
-        .par_lines()
-        .map(|line| hex_string_to_vec_u8(&line.as_bytes()).unwrap())
-        .map(|ciphertext| find_best_character_key_and_score(&ciphertext))
-        .max_by(|left, right| left.score.cmp(&right.score))
+    let (line_number, result) = reader
+        .lines()
+        .enumerate()
+        .par_bridge()
+        .filter(|(_, line)| line.is_ok())
+        .map(|(line_num, line)| (line_num, hex_string_to_vec_u8(&line.unwrap().as_bytes())))
+        .filter(|(_, cipher_result)| cipher_result.is_ok())
+        .map(|(line_num, ciphertext)| {
+            (
+                line_num,
+                find_best_character_key_and_score(&ciphertext.unwrap()),
+            )
+        })
+        .max_by(|(_, left), (_, right)| left.score.cmp(&right.score))
         .unwrap();
 
-    // println!("key: {}", base64::encode_byte(result.key)?); // key is 53, or "1" in base64
+    expect_eq(170, line_number, "expected line number of the encoded line")?;
+    expect_eq(
+        '1',
+        base64::encode_byte(result.key)?,
+        "key is '1' in base64",
+    )?;
     expect_eq(
         "Now that the party is jumping\n",
         std::str::from_utf8(&result.plaintext)?,
@@ -176,26 +189,36 @@ pub fn challenge7() -> Result<()> {
 
 pub fn challenge8() -> Result<()> {
     use std::fs::File;
-    use std::io::{prelude::*, BufReader};
+    use std::io::prelude::*;
 
     let file = File::open("8.txt")?;
     let reader = BufReader::new(file);
 
-    let mut lines_in_ecb_mode: Vec<usize> = Vec::new();
+    let lines_in_ecb_mode: Vec<usize> = reader
+        .lines()
+        .enumerate()
+        .par_bridge()
+        .filter(|(_, line)| line.is_ok())
+        .map(|(line_num, line)| {
+            (
+                line_num,
+                common::hex_string_to_vec_u8(line.unwrap().as_bytes()),
+            )
+        })
+        .filter(|(_, line)| line.is_ok())
+        .filter(|(_, line)| aes::is_cipher_in_ecb_128_mode(line.as_deref().unwrap()))
+        .map(|(line_num, _)| line_num)
+        .collect();
 
-    for (line_num, line) in reader.lines().enumerate() {
-        let cipher_text = common::hex_string_to_vec_u8(line?.as_bytes())?;
-
-        match aes::is_cipher_in_ecb_128_mode(&cipher_text) {
-            true => lines_in_ecb_mode.push(line_num),
-            false => (),
-        }
-    }
-
-    expect_false(
-        // TODO: lines_in_ecb_mode.len() == 4
-        lines_in_ecb_mode.is_empty(),
-        "Detecting lines in a file that are ecb128-encrypted",
+    expect_eq(
+        1,
+        lines_in_ecb_mode.len(),
+        "Only one line is ecb128-encrypted",
+    )?;
+    expect_eq(
+        132,
+        lines_in_ecb_mode[0],
+        "Detecting the line in a file that's ecb128-encrypted",
     )
 }
 
@@ -551,4 +574,74 @@ pub fn challenge16() -> Result<()> {
     println!("{}", bacon_oracle.find_bacon(&cipher_text)?);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod challenge_tests {
+    use super::*;
+
+    #[test]
+    fn test_challenge1() {
+        challenge1().unwrap();
+    }
+    #[test]
+    fn test_challenge2() {
+        challenge2().unwrap();
+    }
+    #[test]
+    fn test_challenge3() {
+        challenge3().unwrap();
+    }
+    #[test]
+    fn test_challenge4() {
+        challenge4().unwrap();
+    }
+    #[test]
+    fn test_challenge5() {
+        challenge5().unwrap();
+    }
+    #[test]
+    fn test_challenge6() {
+        challenge6().unwrap();
+    }
+    #[test]
+    fn test_challenge7() {
+        challenge7().unwrap();
+    }
+    #[test]
+    fn test_challenge8() {
+        challenge8().unwrap();
+    }
+    #[test]
+    fn test_challenge9() {
+        challenge9().unwrap();
+    }
+    #[test]
+    fn test_challenge10() {
+        challenge10().unwrap();
+    }
+    #[test]
+    fn test_challenge11() {
+        challenge11().unwrap();
+    }
+    #[test]
+    fn test_challenge12() {
+        challenge12().unwrap();
+    }
+    #[test]
+    fn test_challenge13() {
+        challenge13().unwrap();
+    }
+    #[test]
+    fn test_challenge14() {
+        challenge14().unwrap();
+    }
+    #[test]
+    fn test_challenge15() {
+        challenge15().unwrap();
+    }
+    #[test]
+    fn test_challenge16() {
+        challenge16().unwrap();
+    }
 }

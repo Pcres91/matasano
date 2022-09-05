@@ -1,4 +1,4 @@
-use crate::errors::Result;
+use crate::errors::{CryptoError, Result};
 use crate::expectations::expect_eq;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 use std::io::{Cursor, Error, ErrorKind};
@@ -61,11 +61,10 @@ pub fn read_encoded_file(filepath: &str) -> Result<Vec<u8>> {
 // this converts base64 to char. If topmost bits aren't 00, returns None
 pub fn encode_byte(byte: u8) -> Result<char> {
     if byte > 63 {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Byte to encode as base64 out of range",
-        )
-        .into());
+        return Err(CryptoError::InvalidDataError(format!(
+            "Tried to base64 encode a char of value {}, which is greater than 63",
+            byte
+        )));
     }
     // capitals
     if byte <= 25 {
@@ -120,11 +119,10 @@ pub fn decode_byte(byte: u8) -> Result<u8> {
     }
     // padding returns none
     else {
-        Err(Error::new(
-            ErrorKind::InvalidData,
-            "Byte to decode from base64 out of range",
-        )
-        .into())
+        Err(CryptoError::InvalidDataError(format!(
+            "base64 decode_byte value out of range, got: {}",
+            byte
+        )))
     }
 }
 

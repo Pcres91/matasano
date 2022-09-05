@@ -818,7 +818,7 @@ fn print_state(state: &[u8]) {
 }
 
 #[cfg(test)]
-mod tests {
+mod aes_tests {
     use super::*;
 
     #[test]
