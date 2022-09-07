@@ -330,12 +330,10 @@ pub fn challenge12() -> Result<()> {
     // find block size
     let block_size = aes::find_block_length(&oracle)?;
 
-    expect_eq(16, block_size, "Breaking aes-ecb-128")?;
+    expect_eq(16, block_size, "Finding block length of encryption oracle")?;
 
     // find whether it's in ecb 128 mode
-    let in_ecb_mode = aes::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?);
-
-    if !in_ecb_mode {
+    if !aes::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?) {
         return Err(AesError::InvalidData(
             "Could not assert that the data is aes-ecb-128 encrypted".to_string(),
         )
@@ -376,8 +374,7 @@ pub fn challenge12() -> Result<()> {
         }
     }
 
-    // print_challenge_result(12, true, Some("Breaking  aes-ecb-128 message"));
-    expect_eq(expected, std::str::from_utf8(&result)?, "")?;
+    expect_eq(expected, std::str::from_utf8(&result)?, "aes-ecb-128 message")?;
 
     Ok(())
 }
