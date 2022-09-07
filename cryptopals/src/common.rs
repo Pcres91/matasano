@@ -10,6 +10,16 @@ extern crate num_traits;
 
 pub struct Wrap(pub Vec<u8>);
 
+pub fn until_err<T, E>(err: &mut &mut std::result::Result<(), E>, item: std::result::Result<T, E>) -> Option<T> {
+    match item {
+        Ok(item) => Some(item),
+        Err(e) => {
+            **err = Err(e);
+            None
+        }
+    }
+}
+
 impl fmt::Display for Wrap {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for &byte in &self.0 {

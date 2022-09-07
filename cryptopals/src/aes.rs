@@ -1,10 +1,12 @@
 use crate::{
-    common::xor_16_bytes,
+    common::{xor_16_bytes, until_err},
     errors::{AesError, AesResult},
     expectations::{expect_eq, expect_true},
 };
 use rayon::prelude::*;
 use std::convert::TryInto;
+use itertools::Itertools;
+use itertools::FoldWhile::{Continue, Done};
 
 type Result<T> = AesResult<T>;
 
@@ -148,7 +150,7 @@ pub fn encrypt_cbc_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8
         let block = if idx == 0 {
             xor_16_bytes((&plaintext_blocks[idx..idx + 16], &iv))
         } else {
-            xor_16_bytes((&plaintext_blocks[idx..idx + 16], &ciphertext[idx-16..idx]))
+            xor_16_bytes((&plaintext_blocks[idx..idx + 16], &ciphertext[idx - 16..idx]))
         };
         ciphertext.extend_from_slice(&encrypt_block_128(&block, &expanded_key)?);
     }
@@ -211,8 +213,9 @@ pub fn generate_rnd_key() -> [u8; 16] {
 #[derive(Debug, PartialEq)]
 pub enum EncryptionType {
     Ecb128,
-    Cbc128
+    Cbc128,
 }
+
 /// Takes the plaintext, adds 0-5bytes prefix, adds 0-5bytes suffix, and then
 /// randomly encrypts with either ecb128 or cbc128. Returned is the ciphertext
 /// with a boolean: true = ecb128 encrypted, false = cbc128 encrypted
@@ -245,40 +248,41 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> 
     // println!("ecb encryption: {}", ecb_encrypt);
 
     if ecb_encrypt {
-        Ok((encrypt_ecb_128(&new_plaintext, &key)?, EncryptionType::Ecb128))
+        Ok((
+            encrypt_ecb_128(&new_plaintext, &key)?,
+            EncryptionType::Ecb128,
+        ))
     } else {
         let iv: [u8; 16] = rng.gen();
-        Ok((encrypt_cbc_128(&new_plaintext, &key, &iv)?, EncryptionType::Cbc128))
+        Ok((
+            encrypt_cbc_128(&new_plaintext, &key, &iv)?,
+            EncryptionType::Cbc128,
+        ))
     }
 }
 
 pub fn detect_encryption_mode(ciphertext: &[u8]) -> EncryptionType {
     match is_data_ecb128_encrypted(ciphertext) {
         true => EncryptionType::Ecb128,
-        false => EncryptionType::Cbc128
+        false => EncryptionType::Cbc128,
     }
 }
 
+/// prefix some plaintext with a single character. Encrypt. Continue, adding another instance of the character each time,
+/// until Pkcs7 padding has increased the length of the ciphertext - the difference in the lengths of the two ciphers is
+/// the block length
 pub fn find_block_length(oracle: &impl Cipher) -> Result<usize> {
-    let mut prev_length = 0;
-    for i in 0..0xff {
-        let new_cipher = oracle.encrypt(&vec![b'a'; i])?;
+    let original_length = oracle.encrypt(&vec![b'a'; 0])?.len();
 
-        if prev_length == 0 {
-            prev_length = new_cipher.len();
-        } else {
-            let block_size = new_cipher.len() - prev_length;
-            if block_size != 0 {
-                return Ok(block_size);
-            }
-
-            prev_length = new_cipher.len();
-        }
-    }
-
-    Err(AesError::NotFound(
-        "Couldn't find the block length".to_string(),
-    ))
+    let mut err = Ok(());
+    let block_length = (0..0xff).into_iter()
+        .map(|i| oracle.encrypt(&vec![b'a'; i]))
+        .scan(&mut err, until_err)
+        .fold_while(0usize, |_, ciphertext| {
+            if ciphertext.len() == original_length { Continue(0)} else {Done(ciphertext.len() - original_length)}
+        }).into_inner();
+    err?;
+    Ok(block_length)
 }
 
 fn encrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
@@ -947,5 +951,33 @@ mod aes_tests {
 
         let plaintext = decrypt_cbc_128(&ciphertext, &key, &iv).unwrap();
         expect_eq(&plaintext_expected[..], &plaintext, "decrypting").unwrap();
+    }
+
+    #[test]
+    fn test_finding_block_length() {
+        let unknown_text = crate::base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK").unwrap();
+
+        struct ConcattorEcbCipher {
+            key: [u8; 16],
+            unknown_text: Vec<u8>,
+        }
+    
+        impl Cipher for ConcattorEcbCipher {
+            fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
+                let mut concatted = plaintext.to_vec();
+                concatted.extend_from_slice(&self.unknown_text);
+                encrypt_ecb_128(&concatted, &self.key)
+            }
+            fn decrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
+                decrypt_ecb_128(plaintext, &self.key)
+            }
+        }
+    
+        let oracle = ConcattorEcbCipher {
+            key: generate_rnd_key(),
+            unknown_text: unknown_text.to_vec(),
+        };
+
+        expect_eq(16, find_block_length(&oracle).unwrap(), "Finding block length").unwrap();
     }
 }

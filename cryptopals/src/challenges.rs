@@ -300,21 +300,21 @@ pub fn challenge12() -> Result<()> {
     let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK")?;
     let expected = "Rollin' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n";
 
-    struct ConcattorEcbOracle {
+    struct ConcattorEcbCipher {
         key: [u8; 16],
-        text_to_append: Vec<u8>,
+        unknown_text: Vec<u8>,
     }
 
-    impl ConcattorEcbOracle {
+    impl ConcattorEcbCipher {
         pub fn set_text(&mut self, text: &[u8]) {
-            self.text_to_append = text.to_vec()
+            self.unknown_text = text.to_vec()
         }
     }
 
-    impl Cipher for ConcattorEcbOracle {
+    impl Cipher for ConcattorEcbCipher {
         fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
             let mut concatted = plaintext.to_vec();
-            concatted.extend_from_slice(&self.text_to_append);
+            concatted.extend_from_slice(&self.unknown_text);
             aes::encrypt_ecb_128(&concatted, &self.key)
         }
         fn decrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
@@ -322,9 +322,9 @@ pub fn challenge12() -> Result<()> {
         }
     }
 
-    let mut oracle = ConcattorEcbOracle {
+    let mut oracle = ConcattorEcbCipher {
         key: aes::generate_rnd_key(),
-        text_to_append: unknown_text.to_vec(),
+        unknown_text: unknown_text.to_vec(),
     };
 
     // find block size
