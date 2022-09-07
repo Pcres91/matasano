@@ -1,4 +1,6 @@
-use crate::errors::{CryptoError, Result};
+use crate::errors::{ExpectationFailure, ExpectationResult};
+
+type Result<T> = ExpectationResult<T>;
 
 // TODO: change these to anyhow::context!() calls?
 pub fn expect_eq<T>(expected: T, actual: T, message: &str) -> Result<()>
@@ -8,7 +10,7 @@ where
 {
     match expected == actual {
         true => Ok(()),
-        false => Err(CryptoError::ExpectEqualFailure {
+        false => Err(ExpectationFailure::ExpectEqualFailure {
             expected: format!("{expected:?}"),
             actual: format!("{actual:?}"),
             message: message.to_string(),
@@ -19,7 +21,7 @@ where
 pub fn expect_true(expected: bool, message: &str) -> Result<()> {
     match expected {
         true => Ok(()),
-        false => Err(CryptoError::ExpectTrueFailure {
+        false => Err(ExpectationFailure::ExpectTrueFailure {
             message: message.to_string(),
         }),
     }
@@ -28,7 +30,7 @@ pub fn expect_true(expected: bool, message: &str) -> Result<()> {
 pub fn expect_false(expected: bool, message: &str) -> Result<()> {
     match expected {
         false => Ok(()),
-        true => Err(CryptoError::ExpectFalseFailure {
+        true => Err(ExpectationFailure::ExpectTrueFailure {
             message: message.to_string(),
         }),
     }

@@ -1,4 +1,8 @@
-use crate::errors::{AesError, AesResult};
+use crate::{
+    common::xor_16_bytes,
+    errors::{AesError, AesResult},
+    expectations::{expect_eq, expect_true},
+};
 use rayon::prelude::*;
 use std::convert::TryInto;
 
@@ -8,66 +12,52 @@ pub const KNOWN_KEY: [u8; 16] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 ];
 
-pub trait Encryptor {
-    fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>>;
-    fn decrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>>;
+pub trait Cipher {
+    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>>;
+    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>>;
 }
 
-pub struct Oracle {
-    pub key: Vec<u8>,
-    pub encryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>>>,
-    pub decryptor: Box<dyn Fn(&[u8], &[u8]) -> Result<Vec<u8>>>,
+pub struct EcbCipher {
+    pub key: [u8; 16],
 }
 
-impl Oracle {
-    pub fn ecb() -> Self {
-        Self {
-            key: generate_key(),
-            encryptor: Box::new(&encrypt_ecb_128),
-            decryptor: Box::new(&decrypt_ecb_128),
+impl Cipher for EcbCipher {
+    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
+        encrypt_ecb_128(plaintext, &self.key)
+    }
+
+    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
+        decrypt_ecb_128(ciphertext, &self.key)
+    }
+}
+
+pub struct CbcCipher {
+    pub key: [u8; 16],
+    pub iv: Option<[u8; 16]>,
+}
+
+impl Cipher for CbcCipher {
+    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
+        match self.iv {
+            Some(x) => encrypt_cbc_128(plaintext, &self.key, &x),
+            None => encrypt_cbc_128_zero_iv(plaintext, &self.key),
         }
     }
 
-    pub fn ecb_with_my_key(key: &[u8]) -> Self {
-        Self {
-            key: key.to_vec(),
-            encryptor: Box::new(&encrypt_ecb_128),
-            decryptor: Box::new(&decrypt_ecb_128),
-        }
-    }
-
-    pub fn cbc() -> Self {
-        Self {
-            key: generate_key(),
-            encryptor: Box::new(&encrypt_cbc_128),
-            decryptor: Box::new(&decrypt_cbc_128),
-        }
-    }
-
-    pub fn cbc_with_my_key(key: &[u8]) -> Self {
-        Self {
-            key: key.to_vec(),
-            encryptor: Box::new(&encrypt_cbc_128),
-            decryptor: Box::new(&decrypt_cbc_128),
+    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
+        match self.iv {
+            Some(x) => decrypt_cbc_128(ciphertext, &self.key, &x),
+            None => decrypt_cbc_128_zero_iv(ciphertext, &self.key),
         }
     }
 }
 
-impl Encryptor for Oracle {
-    fn encrypt(&self, plain_text: &[u8]) -> Result<Vec<u8>> {
-        (*self.encryptor)(plain_text, &self.key)
-    }
-    fn decrypt(&self, cipher_text: &[u8]) -> Result<Vec<u8>> {
-        (*self.decryptor)(cipher_text, &self.key)
-    }
-}
-
-pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+pub fn encrypt_ecb_128(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
 
     let block_byte_length = 16usize;
 
-    let blocks = pkcs7_pad(plain_text, block_byte_length)?;
+    let blocks = pkcs7_pad(plaintext, block_byte_length)?;
 
     Ok((blocks)
         .chunks_exact(16)
@@ -76,8 +66,8 @@ pub fn encrypt_ecb_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
         .collect())
 }
 
-pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    if cipher_text.len() % 16 != 0 {
+pub fn decrypt_ecb_128(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+    if ciphertext.len() % 16 != 0 {
         return Err(AesError::CipherTextLengthError);
     }
 
@@ -87,7 +77,7 @@ pub fn decrypt_ecb_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 
     let expanded_key = expand_key(key)?;
 
-    let mut blocks: Vec<u8> = cipher_text.to_vec();
+    let mut blocks: Vec<u8> = ciphertext.to_vec();
     for idx in (0..blocks.len()).step_by(16) {
         decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
@@ -112,18 +102,18 @@ pub fn is_data_ecb128_encrypted(data: &[u8]) -> bool {
     num_blocks - num_unique_blocks > 1
 }
 
-pub fn find_ecb_128_padded_block_cipher(oracle: &impl Encryptor) -> Result<Vec<u8>> {
+pub fn find_ecb_128_padded_block_cipher(oracle: &impl Cipher) -> Result<Vec<u8>> {
     let padding = vec![16u8; 32 + 15];
 
-    let cipher_text = oracle.encrypt(&padding)?;
+    let ciphertext = oracle.encrypt(&padding)?;
 
-    let mut prev_block = &cipher_text[0..16];
-    for idx in (16..cipher_text.len()).step_by(16) {
-        if prev_block == &cipher_text[idx..idx + 16] {
+    let mut prev_block = &ciphertext[0..16];
+    for idx in (16..ciphertext.len()).step_by(16) {
+        if prev_block == &ciphertext[idx..idx + 16] {
             return Ok(prev_block.to_vec());
         }
 
-        prev_block = &cipher_text[idx..idx + 16];
+        prev_block = &ciphertext[idx..idx + 16];
     }
 
     Err(AesError::Ecb128Error(format!(
@@ -131,41 +121,49 @@ pub fn find_ecb_128_padded_block_cipher(oracle: &impl Encryptor) -> Result<Vec<u
     )))
 }
 
-pub fn encrypt_cbc_128(plain_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+pub fn encrypt_cbc_128_zero_iv(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     let iv = vec![0u8; 16];
-    encrypt_cbc_128_with_iv(plain_text, key, &iv)
+    encrypt_cbc_128(plaintext, key, &iv)
 }
 
-pub fn encrypt_cbc_128_with_iv(plain_text: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
+pub fn encrypt_cbc_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
+    expect_eq(176, expanded_key.len(), "ensuring expanded key length")?;
 
-    let mut blocks: Vec<u8> = plain_text.to_vec();
-    pkcs7_pad_inplace(&mut blocks, 16)?;
+    let padding = get_pkcs7_padding_for(plaintext, 16)?;
 
-    let mut prev_block = iv.to_vec();
+    let plaintext_blocks = [plaintext, &padding].concat();
 
-    for idx in (0..blocks.len()).step_by(16) {
-        for j in 0..16 {
-            blocks[idx + j] ^= prev_block[j];
-        }
+    expect_true(
+        plaintext_blocks.len() % 16 == 0,
+        format!(
+            "plaintext must be composed of 16 byte blocks, got length {}",
+            plaintext_blocks.len()
+        )
+        .as_str(),
+    )?;
 
-        encrypt_block_128_inplace(&mut blocks[idx..idx + 16], &expanded_key)?;
-
-        prev_block = blocks[idx..idx + 16].to_vec();
+    let mut ciphertext = vec![0u8; 0];
+    for idx in (0..plaintext_blocks.len()).step_by(16) {
+        let block = if idx == 0 {
+            xor_16_bytes((&plaintext_blocks[idx..idx + 16], &iv))
+        } else {
+            xor_16_bytes((&plaintext_blocks[idx..idx + 16], &ciphertext[idx-16..idx]))
+        };
+        ciphertext.extend_from_slice(&encrypt_block_128(&block, &expanded_key)?);
     }
-
-    Ok(blocks)
+    Ok(ciphertext)
 }
 
-pub fn decrypt_cbc_128(cipher_text: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let iv = vec![0u8; 16];
-    decrypt_cbc_128_with_iv(cipher_text, key, &iv)
+pub fn decrypt_cbc_128_zero_iv(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+    let iv = [0u8; 16];
+    decrypt_cbc_128(ciphertext, key, &iv)
 }
 
-pub fn decrypt_cbc_128_with_iv(cipher_text: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
 
-    let mut blocks: Vec<u8> = cipher_text.to_vec();
+    let mut blocks: Vec<u8> = ciphertext.to_vec();
     let mut prev_block = iv.to_vec();
 
     for idx in (0..blocks.len()).step_by(16) {
@@ -198,40 +196,48 @@ pub fn decrypt_cbc_128_with_iv(cipher_text: &[u8], key: &[u8], iv: &[u8]) -> Res
     Ok(blocks)
 }
 
-pub fn generate_key() -> Vec<u8> {
+pub fn generate_rnd_key() -> [u8; 16] {
     extern crate rand;
     use rand::prelude::*;
 
     let mut rng = rand::thread_rng();
 
-    let mut key = vec![0u8; 16];
+    let mut key = [0u8; 16];
     rng.fill_bytes(&mut key);
 
     key
 }
 
-pub fn rnd_encryption_oracle(plain_text: &[u8]) -> Result<(Vec<u8>, bool)> {
-    let key = generate_key();
+#[derive(Debug, PartialEq)]
+pub enum EncryptionType {
+    Ecb128,
+    Cbc128
+}
+/// Takes the plaintext, adds 0-5bytes prefix, adds 0-5bytes suffix, and then
+/// randomly encrypts with either ecb128 or cbc128. Returned is the ciphertext
+/// with a boolean: true = ecb128 encrypted, false = cbc128 encrypted
+pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> {
+    let key = generate_rnd_key();
 
     extern crate rand;
     use rand::prelude::*;
     let mut rng = rand::thread_rng();
 
     // extend plain text with 5-10 bytes at the start and end
-    let num_prefix_bytes: usize = rng.gen_range(5..11);
+    let num_prefix_bytes: usize = rng.gen_range(5..=10);
     let mut prefix = vec![0u8; num_prefix_bytes];
     rng.fill_bytes(&mut prefix);
 
-    let num_suffix_bytes: usize = rng.gen_range(5..11);
+    let num_suffix_bytes: usize = rng.gen_range(5..=10);
     let mut suffix = vec![0u8; num_suffix_bytes];
     rng.fill_bytes(&mut suffix);
 
-    let mut new_plain_text: Vec<u8> = Vec::new();
-    new_plain_text.extend_from_slice(&prefix);
-    new_plain_text.extend_from_slice(plain_text);
-    new_plain_text.extend_from_slice(&suffix);
+    let mut new_plaintext: Vec<u8> = Vec::new();
+    new_plaintext.extend_from_slice(&prefix);
+    new_plaintext.extend_from_slice(plaintext);
+    new_plaintext.extend_from_slice(&suffix);
 
-    pkcs7_pad(&mut new_plain_text, 16)?;
+    pkcs7_pad(&mut new_plaintext, 16)?;
 
     // select to either encrypt ecb/cbc
     let ecb_encrypt: bool = rng.gen();
@@ -239,22 +245,21 @@ pub fn rnd_encryption_oracle(plain_text: &[u8]) -> Result<(Vec<u8>, bool)> {
     // println!("ecb encryption: {}", ecb_encrypt);
 
     if ecb_encrypt {
-        Ok((encrypt_ecb_128(&new_plain_text, &key)?, true))
+        Ok((encrypt_ecb_128(&new_plaintext, &key)?, EncryptionType::Ecb128))
     } else {
         let iv: [u8; 16] = rng.gen();
-        Ok((encrypt_cbc_128_with_iv(&new_plain_text, &key, &iv)?, false))
+        Ok((encrypt_cbc_128(&new_plaintext, &key, &iv)?, EncryptionType::Cbc128))
     }
 }
 
-pub fn decryption_oracle(encryptor: &dyn Fn(&[u8]) -> Result<(Vec<u8>, bool)>) -> Result<bool> {
-    let plain_text = [b'a'; 16 * 5];
-    let (cipher_text, in_ecb_mode) = encryptor(&plain_text)?;
-    let detected_ecb = is_data_ecb128_encrypted(&cipher_text);
-
-    Ok(detected_ecb == in_ecb_mode)
+pub fn detect_encryption_mode(ciphertext: &[u8]) -> EncryptionType {
+    match is_data_ecb128_encrypted(ciphertext) {
+        true => EncryptionType::Ecb128,
+        false => EncryptionType::Cbc128
+    }
 }
 
-pub fn find_block_length(oracle: &impl Encryptor) -> Result<usize> {
+pub fn find_block_length(oracle: &impl Cipher) -> Result<usize> {
     let mut prev_length = 0;
     for i in 0..0xff {
         let new_cipher = oracle.encrypt(&vec![b'a'; i])?;
@@ -281,23 +286,24 @@ fn encrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
         return Err(AesError::ExpandedKeyLengthError);
     }
 
-    let mut cipher = block.to_vec();
+    let mut cipherblock = block.to_vec();
 
-    apply_key(&mut cipher, &expanded_key[..16])?;
+    apply_key(&mut cipherblock, &expanded_key[..16])?;
 
     for round in 1..10 {
-        mix_and_sub_rows(&mut cipher)?;
-        mix_columns(&mut cipher)?;
-        apply_key(&mut cipher, &expanded_key[round * 16..round * 16 + 16])?;
+        mix_and_sub_rows(&mut cipherblock)?;
+        mix_columns(&mut cipherblock)?;
+        apply_key(&mut cipherblock, &expanded_key[round * 16..round * 16 + 16])?;
     }
 
     //last round, no mix columns
-    mix_and_sub_rows(&mut cipher)?;
-    apply_key(&mut cipher, &expanded_key[10 * 16..10 * 16 + 16])?;
+    mix_and_sub_rows(&mut cipherblock)?;
+    apply_key(&mut cipherblock, &expanded_key[10 * 16..10 * 16 + 16])?;
 
-    Ok(cipher)
+    Ok(cipherblock)
 }
 
+#[allow(dead_code)]
 fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
@@ -345,13 +351,13 @@ fn decrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
 }
 
 /// takes the key and performs 11 rounds to expand the key
-fn expand_key(key: &[u8]) -> Result<Vec<u8>> {
+fn expand_key(key: &[u8]) -> Result<[u8; 176]> {
     if key.len() != 16 {
         return Err(AesError::KeyLengthError);
     }
 
     // get 11-rounds-worth of keys
-    let mut expanded_key = vec![0u8; 16 * 11];
+    let mut expanded_key = [0u8; 16 * 11];
 
     // 0th round key is the key
     expanded_key[..16].clone_from_slice(&key[..16]);
@@ -749,10 +755,28 @@ pub const SMART_ASCII: [u8; 255] = [
     251, 252, 253, 254, 255,
 ];
 
-pub fn pkcs7_pad(plain_text: &[u8], block_byte_length: usize) -> Result<Vec<u8>> {
-    let final_block_len = plain_text.len() % block_byte_length;
+/// returns just the bytes which will pad the plaintext
+pub fn get_pkcs7_padding_for(plaintext: &[u8], block_byte_length: usize) -> Result<Vec<u8>> {
+    let final_block_len = plaintext.len() % block_byte_length;
 
-    let mut blocks = plain_text.to_vec();
+    let padding_len = if block_byte_length - final_block_len == 0 {
+        block_byte_length
+    } else {
+        block_byte_length - final_block_len
+    };
+
+    if padding_len > 0xff {
+        return Err(AesError::PKCS7PaddingTooLongError);
+    }
+
+    Ok(vec![padding_len as u8; padding_len])
+}
+
+/// returns the plaintext + pkcs7padding
+pub fn pkcs7_pad(plaintext: &[u8], block_byte_length: usize) -> Result<Vec<u8>> {
+    let final_block_len = plaintext.len() % block_byte_length;
+
+    let mut blocks = plaintext.to_vec();
 
     let mut bytes_to_pad_length = block_byte_length - final_block_len;
     if bytes_to_pad_length == 0 {
@@ -769,6 +793,7 @@ pub fn pkcs7_pad(plain_text: &[u8], block_byte_length: usize) -> Result<Vec<u8>>
     Ok(blocks)
 }
 
+/// adds the pkcs7padding to the message
 pub fn pkcs7_pad_inplace(message: &mut Vec<u8>, block_byte_length: usize) -> Result<()> {
     let final_block_len = message.len() % block_byte_length;
 
@@ -864,26 +889,63 @@ mod aes_tests {
 
     #[test]
     fn test_ecb_128_encryption() {
-        let plain_text = b"hello world";
+        let plaintext = b"hello world";
 
-        let cipher_text = encrypt_ecb_128(plain_text, &KNOWN_KEY).unwrap();
+        let ciphertext = encrypt_ecb_128(plaintext, &KNOWN_KEY).unwrap();
 
-        let decrypted = decrypt_ecb_128(&cipher_text, &KNOWN_KEY).unwrap();
+        let decrypted = decrypt_ecb_128(&ciphertext, &KNOWN_KEY).unwrap();
 
-        assert_eq!(plain_text.to_vec(), decrypted);
+        assert_eq!(plaintext.to_vec(), decrypted);
     }
 
     #[test]
     fn test_cbc_128_encryption() {
-        let plain_text = b"Hello World!";
+        let plaintext = b"Hello World!";
 
-        let cipher_text = encrypt_cbc_128(plain_text, &KNOWN_KEY).unwrap();
+        let ciphertext = encrypt_cbc_128_zero_iv(plaintext, &KNOWN_KEY).unwrap();
 
-        let decrypted = decrypt_cbc_128(&cipher_text, &KNOWN_KEY).unwrap();
+        let decrypted = decrypt_cbc_128_zero_iv(&ciphertext, &KNOWN_KEY).unwrap();
 
         assert_eq!(
-            String::from_utf8(plain_text.to_vec()),
+            String::from_utf8(plaintext.to_vec()),
             String::from_utf8(decrypted)
         );
+    }
+
+    #[test]
+    fn test_cbc_against_known_values() {
+        // values taken from https://docs.rs/cbc/latest/cbc/#
+        use hex_literal::hex;
+        let key = [0x42; 16];
+        let iv = [0x24; 16];
+        let plaintext_expected = *b"hello world! this is my plaintext.";
+        let ciphertext_expected = hex!(
+            "c7fe247ef97b21f07cbdd26cb5d346bf"
+            "d27867cb00d9486723e159978fb9a5f9"
+            "14cfb228a710de4171e396e7b6cf859e"
+        );
+
+        let ciphertext = encrypt_cbc_128(&plaintext_expected, &key, &iv).unwrap();
+        expect_eq(
+            ciphertext_expected.len(),
+            ciphertext.len(),
+            "ciphertext length",
+        )
+        .unwrap();
+
+        for idx in 0..ciphertext.len() {
+            if ciphertext_expected[idx] != ciphertext[idx] {
+                println!(
+                    "Failure at idx {}.\nexpected: {:?}\ngot: {:?}",
+                    idx,
+                    &ciphertext_expected[idx..],
+                    &ciphertext[idx..]
+                );
+                assert!(false);
+            }
+        }
+
+        let plaintext = decrypt_cbc_128(&ciphertext, &key, &iv).unwrap();
+        expect_eq(&plaintext_expected[..], &plaintext, "decrypting").unwrap();
     }
 }

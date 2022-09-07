@@ -1,14 +1,17 @@
 use hex::FromHexError;
-use thiserror::Error;
 use std::string::FromUtf8Error;
+use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, CryptoError>;
 pub type AesResult<T> = std::result::Result<T, AesError>;
+pub type ExpectationResult<T> = std::result::Result<T, ExpectationFailure>;
 
 #[derive(Debug, Error)]
 pub enum CryptoError {
     #[error("AesError encountered.")]
     AesError(#[from] AesError),
+    #[error("ExpectationFailure encountered.")]
+    ExpectationFailure(#[from] ExpectationFailure),
     #[error("UserStorageError encountered.")]
     UserStorageError(#[from] UserStorageError),
     #[error("HexError encountered.")]
@@ -19,6 +22,10 @@ pub enum CryptoError {
     Utf8Error(#[from] std::str::Utf8Error),
     #[error("Invalid Data: {0}")]
     InvalidDataError(String),
+}
+
+#[derive(Debug, Error)]
+pub enum ExpectationFailure {
     #[error("Expected {expected}, got {actual}. {message}")]
     ExpectEqualFailure {
         expected: String,
@@ -53,6 +60,8 @@ pub enum AesError {
     InvalidLength(String),
     #[error("FromUtf8Error encountered.")]
     FromUtf8Error(#[from] FromUtf8Error),
+    #[error("ExpectationFailure encountered.")]
+    ExpectationFailure(#[from] ExpectationFailure),
 }
 
 #[derive(Debug, Error)]

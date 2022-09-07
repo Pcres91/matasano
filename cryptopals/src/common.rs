@@ -28,6 +28,22 @@ pub fn hex_string_to_vec_u8(bytes: &[u8]) -> Result<Vec<u8>> {
     }
 }
 
+///xor exactly 16 bytes on the stack
+pub fn xor_16_bytes(vals: (&[u8], &[u8])) -> [u8; 16] {
+    let mut res = [0u8; 16];
+    vals.0
+        .into_iter()
+        .zip(vals.1.into_iter())
+        .enumerate()
+        .for_each(|(idx, (l, r))| res[idx] = l ^ r);
+    res
+}
+
+/// use xor_bytes in a map fn with zipped slices of the same size
+pub fn xor_bytes_tuple_no_fail(val: (&[u8], &[u8])) -> Vec<u8> {
+    xor_bytes(val.0, val.1).unwrap()
+}
+
 pub fn xor_bytes(left: &[u8], right: &[u8]) -> Result<Vec<u8>> {
     expect_eq(left.len(), right.len(), "Lengths of the two slices to xor")?;
 
@@ -269,6 +285,8 @@ pub fn prefix_with_rnd_bytes(range: (usize, usize), text: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use rand::RngCore;
+
     use super::*;
 
     #[test]
@@ -279,5 +297,22 @@ mod tests {
         let res = hamming_distance(&string1.as_bytes(), &string2.as_bytes()).unwrap();
 
         assert_eq!(37, res);
+    }
+
+    #[test]
+    fn test_xor_bytes() {
+        for _ in 0..1000 {
+            let mut left = vec![0u8; 16];
+            let mut right = vec![0u8; 16];
+
+            let mut rng = rand::thread_rng();
+            rng.fill_bytes(&mut left);
+            rng.fill_bytes(&mut right);
+
+            assert_eq!(
+                xor_bytes(&left, &right).unwrap(),
+                xor_16_bytes((&left, &right))
+            );
+        }
     }
 }
