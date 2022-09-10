@@ -39,11 +39,11 @@ pub fn hex_string_to_vec_u8(bytes: &[u8]) -> Result<Vec<u8>> {
 }
 
 ///xor exactly 16 bytes on the stack
-pub fn xor_16_bytes(vals: (&[u8], &[u8])) -> [u8; 16] {
+pub fn xor_16_bytes(left: &[u8], right: &[u8]) -> [u8; 16] {
     let mut res = [0u8; 16];
-    vals.0
+    left
         .into_iter()
-        .zip(vals.1.into_iter())
+        .zip(right.into_iter())
         .enumerate()
         .for_each(|(idx, (l, r))| res[idx] = l ^ r);
     res
@@ -321,7 +321,7 @@ mod tests {
 
             assert_eq!(
                 xor_bytes(&left, &right).unwrap(),
-                xor_16_bytes((&left, &right))
+                xor_16_bytes(&left, &right)
             );
         }
     }

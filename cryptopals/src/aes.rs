@@ -81,7 +81,7 @@ pub fn decrypt_ecb_128(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 
     let mut blocks: Vec<u8> = ciphertext.to_vec();
     for idx in (0..blocks.len()).step_by(16) {
-        decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
+        decrypt_block_128_inplace(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
     validate_and_remove_pkcs7_padding(&blocks)
@@ -130,7 +130,6 @@ pub fn encrypt_cbc_128_zero_iv(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> 
 
 pub fn encrypt_cbc_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
-    expect_eq(176, expanded_key.len(), "ensuring expanded key length")?;
 
     let padding = get_pkcs7_padding_for(plaintext, 16)?;
 
@@ -146,12 +145,16 @@ pub fn encrypt_cbc_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8
     )?;
 
     let mut ciphertext = vec![0u8; 0];
+
+    // for each plaintext block...
     for idx in (0..plaintext_blocks.len()).step_by(16) {
+        // XOR with previous block...
         let block = if idx == 0 {
-            xor_16_bytes((&plaintext_blocks[idx..idx + 16], &iv))
+            xor_16_bytes(&plaintext_blocks[idx..idx + 16], &iv)
         } else {
-            xor_16_bytes((&plaintext_blocks[idx..idx + 16], &ciphertext[idx - 16..idx]))
+            xor_16_bytes(&plaintext_blocks[idx..idx + 16], &ciphertext[idx - 16..idx])
         };
+        // and encrypt the block
         ciphertext.extend_from_slice(&encrypt_block_128(&block, &expanded_key)?);
     }
     Ok(ciphertext)
@@ -165,24 +168,25 @@ pub fn decrypt_cbc_128_zero_iv(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>>
 pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
 
-    let mut blocks: Vec<u8> = ciphertext.to_vec();
-    let mut prev_block = iv.to_vec();
+    let mut plaintext = vec![0u8; 0];
 
-    for idx in (0..blocks.len()).step_by(16) {
-        let block = blocks[idx..idx + 16].to_vec();
+    // for each block...
+    for idx in (0..ciphertext.len()).step_by(16) {
+        // decrypt the block...
+        let block = decrypt_block_128(&ciphertext[idx..idx + 16], &expanded_key)?;
 
-        decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
-
-        for j in 0..16 {
-            blocks[idx + j] ^= prev_block[j];
-        }
-
-        prev_block = block.to_vec();
+        // XOR with previous block...
+        plaintext.extend(if idx == 0 {
+            xor_16_bytes(&block, &iv).to_vec()
+        } else {
+            xor_16_bytes(&block, &ciphertext[idx - 16..idx]).to_vec()
+        })
     }
 
-    blocks = validate_and_remove_pkcs7_padding(&blocks)?;
+    // and remove the padding
+    plaintext = validate_and_remove_pkcs7_padding(&plaintext)?;
 
-    Ok(blocks)
+    Ok(plaintext)
 }
 
 pub fn generate_rnd_key() -> [u8; 16] {
@@ -321,12 +325,15 @@ fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()
     Ok(())
 }
 
-fn decrypt_block_128(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
+fn decrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
+    let mut plainblock = block.to_vec();
+    decrypt_block_128_inplace(&mut plainblock, &expanded_key)?;
+    Ok(plainblock)
+}
+
+fn decrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
-        return Err(AesError::InvalidData(format!(
-            "decrypt_block(): Expanded key must be 176 bytes. Got length {}",
-            expanded_key.len()
-        )));
+        return Err(AesError::ExpandedKeyLengthError);
     }
 
     // must be last four words of the expanded key
@@ -838,22 +845,7 @@ pub fn validate_and_remove_pkcs7_padding(data: &[u8]) -> Result<Vec<u8>> {
         }
     }
 
-    let mut pkcs7_padded = true;
-
-    let last_val = data[data.len() - 1];
-    for i in 0..last_val as usize {
-        let idx = data.len() - 1 - i;
-        if data[idx] != last_val {
-            pkcs7_padded = false;
-            break;
-        }
-    }
-
-    if !pkcs7_padded {
-        return Err(AesError::NotPKCS7PaddedError);
-    }
-
-    Ok(data[..data.len() - last_val as usize].to_vec())
+    Ok(data[..data.len() - data[data.len() - 1] as usize].to_vec())
 }
 
 #[allow(dead_code)]

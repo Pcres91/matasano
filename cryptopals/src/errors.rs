@@ -48,7 +48,7 @@ pub enum AesError {
     NotPKCS7PaddedError,
     #[error("Maximum block length for PKCS7 padding exceeded. Maximum is 0xff bytes")]
     PKCS7PaddingTooLongError,
-    #[error("The Key length once expanded must be of correct size")]
+    #[error("The Key length once expanded must be 176 bytes")]
     ExpandedKeyLengthError,
     #[error("ECB 128 Error: {0}")]
     Ecb128Error(String),
