@@ -180,20 +180,16 @@ pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u
         prev_block = block.to_vec();
     }
 
-    let mut pkcs7_padded = true;
-
+    // check valid padding
     let last_val = blocks[blocks.len() - 1];
     for i in 0..last_val as usize {
         let idx = blocks.len() - 1 - i;
         if blocks[idx] != last_val {
-            pkcs7_padded = false;
-            break;
+            return Err(AesError::InvalidPkcs7Padding(blocks[(blocks.len() - 16)..].to_vec()));
         }
     }
 
-    if pkcs7_padded {
         blocks = blocks[..blocks.len() - last_val as usize].to_vec();
-    }
 
     Ok(blocks)
 }
@@ -979,5 +975,9 @@ mod aes_tests {
         };
 
         expect_eq(16, find_block_length(&oracle).unwrap(), "Finding block length").unwrap();
+    }
+
+    fn test_invalid_padding {
+        let ct = [vec![0u8;14], vec![]]
     }
 }

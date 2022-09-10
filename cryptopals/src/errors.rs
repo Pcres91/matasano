@@ -56,8 +56,10 @@ pub enum AesError {
     NotFound(String),
     #[error("Invalid data: {0}")]
     InvalidData(String),
-    #[error("Invalid length: {0}")]
+    #[error("{0}")]
     InvalidLength(String),
+    #[error("Invalid PKCS7 padding: {0:?}")]
+    InvalidPkcs7Padding(Vec<u8>),
     #[error("FromUtf8Error encountered.")]
     FromUtf8Error(#[from] FromUtf8Error),
     #[error("ExpectationFailure encountered.")]
