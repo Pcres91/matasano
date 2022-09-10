@@ -58,7 +58,7 @@ pub enum AesError {
     InvalidData(String),
     #[error("{0}")]
     InvalidLength(String),
-    #[error("Invalid PKCS7 padding: {0:?}")]
+    #[error("Invalid PKCS7 padding. Last block: {0:?}")]
     InvalidPkcs7Padding(Vec<u8>),
     #[error("FromUtf8Error encountered.")]
     FromUtf8Error(#[from] FromUtf8Error),

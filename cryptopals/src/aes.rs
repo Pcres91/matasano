@@ -1,12 +1,12 @@
 use crate::{
-    common::{xor_16_bytes, until_err},
+    common::{until_err, xor_16_bytes},
     errors::{AesError, AesResult},
     expectations::{expect_eq, expect_true},
 };
+use itertools::FoldWhile::{Continue, Done};
+use itertools::Itertools;
 use rayon::prelude::*;
 use std::convert::TryInto;
-use itertools::Itertools;
-use itertools::FoldWhile::{Continue, Done};
 
 type Result<T> = AesResult<T>;
 
@@ -84,7 +84,7 @@ pub fn decrypt_ecb_128(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
         decrypt_block_128(&mut blocks[idx..idx + 16], &expanded_key)?;
     }
 
-    remove_pkcs7_padding(&blocks)
+    validate_and_remove_pkcs7_padding(&blocks)
 }
 
 /// ECB128 is stateless and deterministic. That is, the cipher will always be the same for a block
@@ -180,16 +180,7 @@ pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u
         prev_block = block.to_vec();
     }
 
-    // check valid padding
-    let last_val = blocks[blocks.len() - 1];
-    for i in 0..last_val as usize {
-        let idx = blocks.len() - 1 - i;
-        if blocks[idx] != last_val {
-            return Err(AesError::InvalidPkcs7Padding(blocks[(blocks.len() - 16)..].to_vec()));
-        }
-    }
-
-        blocks = blocks[..blocks.len() - last_val as usize].to_vec();
+    blocks = validate_and_remove_pkcs7_padding(&blocks)?;
 
     Ok(blocks)
 }
@@ -271,17 +262,23 @@ pub fn find_block_length(oracle: &impl Cipher) -> Result<usize> {
     let original_length = oracle.encrypt(&vec![b'a'; 0])?.len();
 
     let mut err = Ok(());
-    let block_length = (0..0xff).into_iter()
+    let block_length = (0..0xff)
+        .into_iter()
         .map(|i| oracle.encrypt(&vec![b'a'; i]))
         .scan(&mut err, until_err)
         .fold_while(0usize, |_, ciphertext| {
-            if ciphertext.len() == original_length { Continue(0)} else {Done(ciphertext.len() - original_length)}
-        }).into_inner();
+            if ciphertext.len() == original_length {
+                Continue(0)
+            } else {
+                Done(ciphertext.len() - original_length)
+            }
+        })
+        .into_inner();
     err?;
     Ok(block_length)
 }
 
-fn encrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
+fn encrypt_block_128(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }
@@ -813,13 +810,40 @@ pub fn pkcs7_pad_inplace(message: &mut Vec<u8>, block_byte_length: usize) -> Res
     Ok(())
 }
 
-pub fn remove_pkcs7_padding(message: &[u8]) -> Result<Vec<u8>> {
+pub fn is_pkcs7_padding_valid_for(data: &[u8], block_length: usize) -> Result<bool> {
+    expect_eq(
+        0,
+        data.len() % block_length,
+        "validate_pkcs7_padding: data must be divisible by block length",
+    )?;
+
+    // check valid padding
+    let last_val = data[data.len() - 1];
+    for i in 0..last_val as usize {
+        let idx = data.len() - 1 - i;
+        if data[idx] != last_val {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+pub fn validate_and_remove_pkcs7_padding(data: &[u8]) -> Result<Vec<u8>> {
+    match is_pkcs7_padding_valid_for(&data, 16)? {
+        true => (),
+        false => {
+            return Err(AesError::InvalidPkcs7Padding(
+                data[data.len() - 16..].to_vec(),
+            ))
+        }
+    }
+
     let mut pkcs7_padded = true;
 
-    let last_val = message[message.len() - 1];
+    let last_val = data[data.len() - 1];
     for i in 0..last_val as usize {
-        let idx = message.len() - 1 - i;
-        if message[idx] != last_val {
+        let idx = data.len() - 1 - i;
+        if data[idx] != last_val {
             pkcs7_padded = false;
             break;
         }
@@ -829,7 +853,7 @@ pub fn remove_pkcs7_padding(message: &[u8]) -> Result<Vec<u8>> {
         return Err(AesError::NotPKCS7PaddedError);
     }
 
-    Ok(message[..message.len() - last_val as usize].to_vec())
+    Ok(data[..data.len() - last_val as usize].to_vec())
 }
 
 #[allow(dead_code)]
@@ -849,6 +873,8 @@ fn print_state(state: &[u8]) {
 
 #[cfg(test)]
 mod aes_tests {
+    use crate::expectations::expect_false;
+
     use super::*;
 
     #[test]
@@ -866,7 +892,7 @@ mod aes_tests {
         let mut message = vec![0u8; 12];
         message.extend_from_slice(&[4u8; 4]);
 
-        let res = remove_pkcs7_padding(&message);
+        let res = validate_and_remove_pkcs7_padding(&message);
 
         match res {
             Ok(r) => assert_eq!(message.len() - 4, r.len()),
@@ -881,7 +907,7 @@ mod aes_tests {
 
         let original_length = message.len();
 
-        match remove_pkcs7_padding(&message) {
+        match validate_and_remove_pkcs7_padding(&message) {
             Ok(_) => assert!(false),
             Err(_) => assert_eq!(original_length, message.len()),
         };
@@ -957,7 +983,7 @@ mod aes_tests {
             key: [u8; 16],
             unknown_text: Vec<u8>,
         }
-    
+
         impl Cipher for ConcattorEcbCipher {
             fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
                 let mut concatted = plaintext.to_vec();
@@ -968,16 +994,55 @@ mod aes_tests {
                 decrypt_ecb_128(plaintext, &self.key)
             }
         }
-    
+
         let oracle = ConcattorEcbCipher {
             key: generate_rnd_key(),
             unknown_text: unknown_text.to_vec(),
         };
 
-        expect_eq(16, find_block_length(&oracle).unwrap(), "Finding block length").unwrap();
+        expect_eq(
+            16,
+            find_block_length(&oracle).unwrap(),
+            "Finding block length",
+        )
+        .unwrap();
     }
 
-    fn test_invalid_padding {
-        let ct = [vec![0u8;14], vec![]]
+    #[test]
+    fn test_padding_validity_returned_when_encrypting_block() {
+        let mut data = [vec![0u8; 14], vec![0x2u8; 2]].concat();
+        expect_true(
+            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
+            "Testing valid padding is validated",
+        )
+        .unwrap();
+
+        data = [vec![1u8; 16], vec![0xfu8; 16]].concat();
+        expect_true(
+            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
+            "Testing valid full padding block",
+        )
+        .unwrap();
+
+        data = [vec![1u8; 15], vec![0xffu8; 1]].concat();
+        expect_false(
+            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
+            "Testing 0xff final block on bad padding",
+        )
+        .unwrap();
+
+        data = [vec![1u8; 14], vec![0x3u8; 2]].concat();
+        expect_false(
+            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
+            "Testing one too few values is invalid",
+        )
+        .unwrap();
+
+        data = [vec![1u8; 12], vec![0x3u8; 4]].concat();
+        expect_true(
+            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
+            "Testing one too many values is valid",
+        )
+        .unwrap();
     }
 }

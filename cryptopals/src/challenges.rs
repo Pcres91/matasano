@@ -374,7 +374,11 @@ pub fn challenge12() -> Result<()> {
         }
     }
 
-    expect_eq(expected, std::str::from_utf8(&result)?, "aes-ecb-128 message")?;
+    expect_eq(
+        expected,
+        std::str::from_utf8(&result)?,
+        "aes-ecb-128 message",
+    )?;
 
     Ok(())
 }
@@ -544,7 +548,7 @@ pub fn challenge15() -> Result<()> {
     let mut message = vec![0u8; 12];
     message.extend_from_slice(&[4u8; 4]);
 
-    let res = aes::remove_pkcs7_padding(&message)?;
+    let res = aes::validate_and_remove_pkcs7_padding(&message)?;
 
     expect_eq(message.len() - 4, res.len(), "Message length")?;
 
@@ -553,7 +557,7 @@ pub fn challenge15() -> Result<()> {
 
     let original_length2 = message2.len();
 
-    match aes::remove_pkcs7_padding(&message2) {
+    match aes::validate_and_remove_pkcs7_padding(&message2) {
         Ok(_) => Err(AesError::InvalidData(format!("Unexpected padding at end of message")).into()),
         Err(_) => match expect_eq(
             original_length2,
