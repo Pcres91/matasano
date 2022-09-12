@@ -52,6 +52,8 @@ pub enum AesError {
     ExpandedKeyLengthError,
     #[error("ECB 128 Error: {0}")]
     Ecb128Error(String),
+    #[error("CBC 128 Error: {0}")]
+    Cbc128Error(String),
     #[error("Not Found: {0}")]
     NotFound(String),
     #[error("Invalid data: {0}")]

@@ -165,7 +165,7 @@ pub fn decrypt_cbc_128_zero_iv(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>>
     decrypt_cbc_128(ciphertext, key, &iv)
 }
 
-pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8; 16]) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
 
     let mut plaintext = vec![0u8; 0];
@@ -177,7 +177,7 @@ pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u
 
         // XOR with previous block...
         plaintext.extend(if idx == 0 {
-            xor_16_bytes(&block, &iv).to_vec()
+            xor_16_bytes(&block, iv).to_vec()
         } else {
             xor_16_bytes(&block, &ciphertext[idx - 16..idx]).to_vec()
         })
@@ -826,16 +826,18 @@ pub fn is_pkcs7_padding_valid_for(data: &[u8], block_length: usize) -> Result<bo
 
     // check valid padding
     let last_val = data[data.len() - 1];
-    for i in 0..last_val as usize {
-        let idx = data.len() - 1 - i;
-        if data[idx] != last_val {
-            return Ok(false);
-        }
-    }
-    Ok(true)
+
+    if last_val as usize > data.len() || last_val == 0 {
+        return Ok(false);
+    };
+
+    Ok(data[data.len() - last_val as usize..]
+        .into_iter()
+        .all_equal())
 }
 
 pub fn validate_and_remove_pkcs7_padding(data: &[u8]) -> Result<Vec<u8>> {
+    println!("validate {:?}", data);
     match is_pkcs7_padding_valid_for(&data, 16)? {
         true => (),
         false => {
@@ -1034,6 +1036,13 @@ mod aes_tests {
         expect_true(
             is_pkcs7_padding_valid_for(&data, 16).unwrap(),
             "Testing one too many values is valid",
+        )
+        .unwrap();
+
+        data = [vec![1u8; 15], vec![0x0u8; 1]].concat();
+        expect_false(
+            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
+            "Testing last value is 0 returns invalid",
         )
         .unwrap();
     }

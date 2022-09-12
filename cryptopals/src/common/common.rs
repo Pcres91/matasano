@@ -10,7 +10,10 @@ extern crate num_traits;
 
 pub struct Wrap(pub Vec<u8>);
 
-pub fn until_err<T, E>(err: &mut &mut std::result::Result<(), E>, item: std::result::Result<T, E>) -> Option<T> {
+pub fn until_err<T, E>(
+    err: &mut &mut std::result::Result<(), E>,
+    item: std::result::Result<T, E>,
+) -> Option<T> {
     match item {
         Ok(item) => Some(item),
         Err(e) => {
@@ -41,8 +44,7 @@ pub fn hex_string_to_vec_u8(bytes: &[u8]) -> Result<Vec<u8>> {
 ///xor exactly 16 bytes on the stack
 pub fn xor_16_bytes(left: &[u8], right: &[u8]) -> [u8; 16] {
     let mut res = [0u8; 16];
-    left
-        .into_iter()
+    left.into_iter()
         .zip(right.into_iter())
         .enumerate()
         .for_each(|(idx, (l, r))| res[idx] = l ^ r);
@@ -88,7 +90,7 @@ pub fn xor_bits(left: &[u8], right: &[u8]) -> Vec<u8> {
 }
 
 /// XOR each character in a buffer with a single character key.
-pub fn single_byte_xor(cipher: &[u8], key: u8) -> Vec<u8> {
+pub fn xor_with_single_byte(cipher: &[u8], key: u8) -> Vec<u8> {
     cipher.par_iter().map(|byte| byte ^ key).collect()
 }
 
@@ -156,7 +158,7 @@ impl From<(u8, i32, Vec<u8>)> for ScoredText {
 pub fn find_best_character_key_and_score(cipher: &[u8]) -> ScoredText {
     (0..0xffu8)
         .into_par_iter()
-        .map(|key| (key, single_byte_xor(&cipher, key)))
+        .map(|key| (key, xor_with_single_byte(&cipher, key)))
         .map(|(key, decoded_message)| (key, score_text(&decoded_message), decoded_message))
         .max_by(|left, right| left.1.cmp(&right.1))
         .unwrap()

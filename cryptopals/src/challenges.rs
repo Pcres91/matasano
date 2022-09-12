@@ -82,7 +82,7 @@ pub fn challenge2() -> Result<()> {
 
 /// Find the single character that a buffer has been XOR'd with.
 pub fn challenge3() -> Result<()> {
-    use common::{find_best_character_key, hex_string_to_vec_u8, single_byte_xor};
+    use common::{find_best_character_key, hex_string_to_vec_u8, xor_with_single_byte};
 
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher = hex_string_to_vec_u8(
@@ -94,7 +94,7 @@ pub fn challenge3() -> Result<()> {
 
     let key = find_best_character_key(&cipher);
 
-    let tmp = single_byte_xor(&cipher, key);
+    let tmp = xor_with_single_byte(&cipher, key);
     let result = std::str::from_utf8(&tmp)?;
 
     expect_eq(expected_result, result, "")?;
