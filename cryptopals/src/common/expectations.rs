@@ -1,4 +1,4 @@
-use crate::errors::{ExpectationFailure, ExpectationResult};
+use crate::common::errors::{ExpectationFailure, ExpectationResult};
 
 type Result<T> = ExpectationResult<T>;
 

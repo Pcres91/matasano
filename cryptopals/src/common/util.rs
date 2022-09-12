@@ -1,6 +1,8 @@
-use crate::errors::Result;
-use crate::expectations::{expect_eq, expect_true};
-use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
+#[allow(unused_imports)]
+use crate::common::expectations::{expect_eq, expect_false, expect_true};
+use crate::common::{bit_ops::xor_with_single_byte, errors::Result};
+
+use bitstream_io::{BigEndian, BitRead, BitReader};
 use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -39,59 +41,6 @@ pub fn hex_string_to_vec_u8(bytes: &[u8]) -> Result<Vec<u8>> {
         Ok(res) => Ok(res),
         Err(hex_error) => Err(hex_error.into()),
     }
-}
-
-///xor exactly 16 bytes on the stack
-pub fn xor_16_bytes(left: &[u8], right: &[u8]) -> [u8; 16] {
-    let mut res = [0u8; 16];
-    left.into_iter()
-        .zip(right.into_iter())
-        .enumerate()
-        .for_each(|(idx, (l, r))| res[idx] = l ^ r);
-    res
-}
-
-/// use xor_bytes in a map fn with zipped slices of the same size
-pub fn xor_bytes_tuple_no_fail(val: (&[u8], &[u8])) -> Vec<u8> {
-    xor_bytes(val.0, val.1).unwrap()
-}
-
-pub fn xor_bytes(left: &[u8], right: &[u8]) -> Result<Vec<u8>> {
-    expect_eq(left.len(), right.len(), "Lengths of the two slices to xor")?;
-
-    let mut res: Vec<u8> = Vec::new();
-
-    for i in 0..left.len() {
-        res.push(left[i] ^ right[i]);
-    }
-
-    Ok(res)
-}
-
-// performs a per-bit operation using bitstreams.Bit of overkill
-#[allow(dead_code)]
-pub fn xor_bits(left: &[u8], right: &[u8]) -> Vec<u8> {
-    let mut l_cur = Cursor::new(&left);
-    let mut l_reader = BitReader::endian(&mut l_cur, BigEndian);
-
-    let mut r_cur = Cursor::new(&right);
-    let mut r_reader = BitReader::endian(&mut r_cur, BigEndian);
-
-    let mut writer = BitWriter::endian(Vec::new(), BigEndian);
-
-    let num_bits = left.len() * 8;
-
-    for _i in 0..num_bits {
-        let res: bool = l_reader.read_bit().unwrap() ^ r_reader.read_bit().unwrap();
-        writer.write_bit(res).unwrap();
-    }
-
-    writer.into_writer()
-}
-
-/// XOR each character in a buffer with a single character key.
-pub fn xor_with_single_byte(cipher: &[u8], key: u8) -> Vec<u8> {
-    cipher.par_iter().map(|byte| byte ^ key).collect()
 }
 
 #[allow(dead_code)]
@@ -297,8 +246,6 @@ pub fn prefix_with_rnd_bytes(range: (usize, usize), text: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use rand::RngCore;
-
     use super::*;
 
     #[test]
@@ -310,21 +257,23 @@ mod tests {
 
         assert_eq!(37, res);
     }
-
-    #[test]
-    fn test_xor_bytes() {
-        for _ in 0..1000 {
-            let mut left = vec![0u8; 16];
-            let mut right = vec![0u8; 16];
-
-            let mut rng = rand::thread_rng();
-            rng.fill_bytes(&mut left);
-            rng.fill_bytes(&mut right);
-
-            assert_eq!(
-                xor_bytes(&left, &right).unwrap(),
-                xor_16_bytes(&left, &right)
-            );
-        }
-    }
 }
+
+/// looks for space, lowercase, uppercase, newline/tab/etc, numbers, then rest
+/// could be sped up more using common::common_letter_freqs, but this already
+/// reduces number of checks by ~5-6x compared to 0u8..0xff
+pub const SMART_ASCII: [u8; 255] = [
+    32, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
+    116, 117, 118, 119, 120, 121, 122, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+    80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 39, 9, 10, 11, 12, 13, 40, 41, 42, 43, 44, 45, 46,
+    47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 33, 34, 35, 36, 37, 38,
+    91, 92, 93, 94, 95, 96, 1, 2, 3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+    26, 27, 28, 29, 30, 31, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136,
+    137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
+    156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
+    175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193,
+    194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212,
+    213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231,
+    232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250,
+    251, 252, 253, 254, 255,
+];

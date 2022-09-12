@@ -1,15 +1,18 @@
-use crate::aes;
-use crate::aes::detect_encryption_mode;
-use crate::aes::Cipher;
-use crate::base64;
-use crate::common;
-// use crate::errors;
-use crate::errors::{AesError, AesResult, Result};
-#[allow(unused_imports)]
-use crate::expectations::{expect_eq, expect_false, expect_true};
-use crate::user_storage;
-use common::Wrap;
+use crate::{
+    aes::{pkcs7::*, util::Cipher, *},
+    base64,
+    common::{
+        bit_ops::*,
+        errors::{AesError, AesResult, Result},
+        expectations::*,
+        user_storage::*,
+        util::*,
+    },
+    *,
+};
 use rayon::prelude::*;
+use std::fs::File;
+use std::io::prelude::*;
 use std::io::BufReader;
 
 pub fn set1() {
@@ -48,8 +51,6 @@ pub fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Res
 
 /// Converting a string of hex to bytes representing chars, then those chars to base64
 pub fn challenge1() -> Result<()> {
-    use common::hex_string_to_vec_u8;
-
     let hex_values_as_string = b"49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
     let exp_encoding =
         "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t".to_string();
@@ -66,8 +67,6 @@ pub fn challenge1() -> Result<()> {
 
 /// take two buffers of equal length and produce their XOR combination
 pub fn challenge2() -> Result<()> {
-    use common::{hex_string_to_vec_u8, xor_bytes};
-
     let a = hex_string_to_vec_u8(b"1c0111001f010100061a024b53535009181c")?;
     let b = hex_string_to_vec_u8(b"686974207468652062756c6c277320657965")?;
 
@@ -82,8 +81,6 @@ pub fn challenge2() -> Result<()> {
 
 /// Find the single character that a buffer has been XOR'd with.
 pub fn challenge3() -> Result<()> {
-    use common::{find_best_character_key, hex_string_to_vec_u8, xor_with_single_byte};
-
     let expected_result = "Cooking MC's like a pound of bacon";
     let cipher = hex_string_to_vec_u8(
         b"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736",
@@ -104,10 +101,6 @@ pub fn challenge3() -> Result<()> {
 
 /// Find the line in a file that has been XOR'd with a single character key.
 pub fn challenge4() -> Result<()> {
-    use common::{find_best_character_key_and_score, hex_string_to_vec_u8};
-    use std::fs::File;
-    use std::io::prelude::*;
-
     let file = File::open("4.txt")?;
     let reader = BufReader::new(file);
 
@@ -143,7 +136,6 @@ pub fn challenge4() -> Result<()> {
 }
 
 pub fn challenge5() -> Result<()> {
-    use common::{hex_string_to_vec_u8, repeated_xor};
     let plaintext = b"Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal";
     let key = b"ICE";
 
@@ -157,8 +149,6 @@ pub fn challenge5() -> Result<()> {
 }
 
 pub fn challenge6() -> Result<()> {
-    use common::{find_best_character_key, find_key_size, repeated_xor, slice_by_byte};
-
     let cipher = base64::read_encoded_file("6.txt")?;
 
     // iterate through key sizes, finding the one with the lowest average hamming distance over 20 blocks
@@ -192,7 +182,7 @@ pub fn challenge7() -> Result<()> {
     let cipher = base64::read_encoded_file("7.txt")?;
     let expected = "I'm back and I'm ringin' the bell \nA rockin' on the mike while the fly girls yell \nIn ecstasy in the back of me \nWell that's my DJ Deshay cuttin' all them Z's \nHittin' hard and the girlies goin' crazy \nVanilla's on the mike, man I'm not lazy. \n\nI'm lettin' my drug kick in \nIt controls my mouth and I begin \nTo just let it flow, let my concepts go \nMy posse's to the side yellin', Go Vanilla Go! \n\nSmooth 'cause that's the way I will be \nAnd if you don't give a damn, then \nWhy you starin' at me \nSo get off 'cause I control the stage \nThere's no dissin' allowed \nI'm in my own phase \nThe girlies sa y they love me and that is ok \nAnd I can dance better than any kid n' play \n\nStage 2 -- Yea the one ya' wanna listen to \nIt's off my head so let the beat play through \nSo I can funk it up and make it sound good \n1-2-3 Yo -- Knock on some wood \nFor good luck, I like my rhymes atrocious \nSupercalafragilisticexpialidocious \nI'm an effect and that you can bet \nI can take a fly girl and make her wet. \n\nI'm like Samson -- Samson to Delilah \nThere's no denyin', You can try to hang \nBut you'll keep tryin' to get my style \nOver and over, practice makes perfect \nBut not if you're a loafer. \n\nYou'll get nowhere, no place, no time, no girls \nSoon -- Oh my God, homebody, you probably eat \nSpaghetti with a spoon! Come on and say it! \n\nVIP. Vanilla Ice yep, yep, I'm comin' hard like a rhino \nIntoxicating so you stagger like a wino \nSo punks stop trying and girl stop cryin' \nVanilla Ice is sellin' and you people are buyin' \n'Cause why the freaks are jockin' like Crazy Glue \nMovin' and groovin' trying to sing along \nAll through the ghetto groovin' this here song \nNow you're amazed by the VIP posse. \n\nSteppin' so hard like a German Nazi \nStartled by the bases hittin' ground \nThere's no trippin' on mine, I'm just gettin' down \nSparkamatic, I'm hangin' tight like a fanatic \nYou trapped me once and I thought that \nYou might have it \nSo step down and lend me your ear \n'89 in my time! You, '90 is my year. \n\nYou're weakenin' fast, YO! and I can tell it \nYour body's gettin' hot, so, so I can smell it \nSo don't be mad and don't be sad \n'Cause the lyrics belong to ICE, You can call me Dad \nYou're pitchin' a fit, so step back and endure \nLet the witch doctor, Ice, do the dance to cure \nSo come up close and don't be square \nYou wanna battle me -- Anytime, anywhere \n\nYou thought that I was weak, Boy, you're dead wrong \nSo come on, everybody and sing this song \n\nSay -- Play that funky music Say, go white boy, go white boy go \nplay that funky music Go white boy, go white boy, go \nLay down and boogie and play that funky music till you die. \n\nPlay that funky music Come on, Come on, let me hear \nPlay that funky music white boy you say it, say it \nPlay that funky music A little louder now \nPlay that funky music, white boy Come on, Come on, Come on \nPlay that funky music \n";
 
-    let ecb_cipher = aes::EcbCipher {
+    let ecb_cipher = ecb::EcbCipher {
         key: *b"YELLOW SUBMARINE",
     };
     let plaintext_as_bytes = ecb_cipher.decrypt(&cipher)?;
@@ -204,9 +194,6 @@ pub fn challenge7() -> Result<()> {
 }
 
 pub fn challenge8() -> Result<()> {
-    use std::fs::File;
-    use std::io::prelude::*;
-
     let file = File::open("8.txt")?;
     let reader = BufReader::new(file);
 
@@ -215,9 +202,9 @@ pub fn challenge8() -> Result<()> {
         .filter_map(|line| line.ok())
         .enumerate()
         .par_bridge()
-        .map(|(line_num, line)| (line_num, common::hex_string_to_vec_u8(line.as_bytes())))
+        .map(|(line_num, line)| (line_num, hex_string_to_vec_u8(line.as_bytes())))
         .filter(|(_, line)| line.is_ok())
-        .filter(|(_, line)| aes::is_data_ecb128_encrypted(line.as_deref().unwrap()))
+        .filter(|(_, line)| ecb::is_data_ecb128_encrypted(line.as_deref().unwrap()))
         .map(|(line_num, _)| line_num)
         .collect();
 
@@ -239,7 +226,7 @@ pub fn challenge9() -> Result<()> {
     let mut msg = b"YELLOW SUBMARINE".to_vec();
     let key_len = 20;
 
-    let padded = aes::pkcs7_pad(&mut msg, key_len)?;
+    let padded = pkcs7_pad(&mut msg, key_len)?;
 
     let mut expected = msg.clone();
     expected.extend_from_slice(&vec![4; 4]);
@@ -257,7 +244,7 @@ pub fn challenge10() -> Result<()> {
     let ciphertext = base64::read_encoded_file("10.txt")?;
     let key = b"YELLOW SUBMARINE";
 
-    let cbc_cipher = aes::CbcCipher {
+    let cbc_cipher = cbc::CbcCipher {
         key: *key,
         iv: None,
     };
@@ -284,9 +271,9 @@ pub fn challenge11() -> Result<()> {
     let num_tests = 1000;
     let mut successful_detections = 0;
     for _ in 0..num_tests {
-        let (ciphertext, encryption_type) = aes::encryption_oracle(plaintext)?;
+        let (ciphertext, encryption_type) = aes::util::encryption_oracle(plaintext)?;
 
-        if detect_encryption_mode(&ciphertext) == encryption_type {
+        if aes::util::detect_encryption_mode(&ciphertext) == encryption_type {
             successful_detections += 1;
         }
     }
@@ -311,29 +298,29 @@ pub fn challenge12() -> Result<()> {
         }
     }
 
-    impl Cipher for ConcattorEcbCipher {
+    impl aes::util::Cipher for ConcattorEcbCipher {
         fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
             let mut concatted = plaintext.to_vec();
             concatted.extend_from_slice(&self.unknown_text);
-            aes::encrypt_ecb_128(&concatted, &self.key)
+            ecb::encrypt_ecb_128(&concatted, &self.key)
         }
         fn decrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
-            aes::decrypt_ecb_128(plaintext, &self.key)
+            ecb::decrypt_ecb_128(plaintext, &self.key)
         }
     }
 
     let mut oracle = ConcattorEcbCipher {
-        key: aes::generate_rnd_key(),
+        key: aes::util::generate_rnd_key(),
         unknown_text: unknown_text.to_vec(),
     };
 
     // find block size
-    let block_size = aes::find_block_length(&oracle)?;
+    let block_size = aes::util::find_block_length(&oracle)?;
 
     expect_eq(16, block_size, "Finding block length of encryption oracle")?;
 
     // find whether it's in ecb 128 mode
-    if !aes::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?) {
+    if !aes::ecb::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?) {
         return Err(AesError::InvalidData(
             "Could not assert that the data is aes-ecb-128 encrypted".to_string(),
         )
@@ -361,7 +348,7 @@ pub fn challenge12() -> Result<()> {
             let ecb_input_block_with_unkown = oracle.encrypt(&input_block)?;
             let expected_block = ecb_input_block_with_unkown[..16].to_vec();
 
-            for i in aes::SMART_ASCII.iter() {
+            for i in common::util::SMART_ASCII.iter() {
                 new_input_block[15] = *i;
                 let new_output = oracle.encrypt(&new_input_block)?;
                 if new_output[..16] == expected_block[..] {
@@ -384,8 +371,6 @@ pub fn challenge12() -> Result<()> {
 }
 
 pub fn challenge13() -> Result<()> {
-    use user_storage::*;
-
     unsafe {
         // explanation:
         // payload ensures there are 4 distinct blocks to build after ciphered
@@ -430,30 +415,29 @@ pub fn challenge14() -> Result<()> {
     let string_to_find = "Let's see if we can decipher this";
 
     fn encrypt_with_rnd_prefix(plaintext: &[u8], key: &[u8]) -> AesResult<Vec<u8>> {
-        use common::prefix_with_rnd_bytes;
         let rnd_bytes_range = (0, 50);
-        let text = prefix_with_rnd_bytes(rnd_bytes_range, &plaintext);
-        aes::encrypt_ecb_128(&text, &key)
+        let text = common::util::prefix_with_rnd_bytes(rnd_bytes_range, &plaintext);
+        aes::ecb::encrypt_ecb_128(&text, &key)
     }
 
     struct Ch14Cipher {
         key: [u8; 16],
     }
 
-    impl Cipher for Ch14Cipher {
+    impl aes::util::Cipher for Ch14Cipher {
         fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
             encrypt_with_rnd_prefix(plaintext, &self.key)
         }
         fn decrypt(&self, ciphertext: &[u8]) -> AesResult<Vec<u8>> {
-            aes::decrypt_ecb_128(ciphertext, &self.key)
+            aes::ecb::decrypt_ecb_128(ciphertext, &self.key)
         }
     }
 
     let cipher = Ch14Cipher {
-        key: aes::generate_rnd_key(),
+        key: aes::util::generate_rnd_key(),
     };
 
-    let padding_cipher_block = aes::find_ecb_128_padded_block_cipher(&cipher)?;
+    let padding_cipher_block = aes::ecb::find_ecb_128_padded_block_cipher(&cipher)?;
 
     let mut found_text_length = false;
     let mut text_length = 0;
@@ -505,7 +489,7 @@ pub fn challenge14() -> Result<()> {
                     let mut char_decryptor_block: Vec<u8> = payload[16..31].to_vec();
                     char_decryptor_block.push(b'A');
 
-                    for i in aes::SMART_ASCII.iter() {
+                    for i in common::util::SMART_ASCII.iter() {
                         char_decryptor_block[15] = *i;
 
                         let mut char_decrypt_cipher = cipher.encrypt(&char_decryptor_block)?;
@@ -548,7 +532,7 @@ pub fn challenge15() -> Result<()> {
     let mut message = vec![0u8; 12];
     message.extend_from_slice(&[4u8; 4]);
 
-    let res = aes::validate_and_remove_pkcs7_padding(&message)?;
+    let res = aes::pkcs7::validate_and_remove_pkcs7_padding(&message)?;
 
     expect_eq(message.len() - 4, res.len(), "Message length")?;
 
@@ -557,7 +541,7 @@ pub fn challenge15() -> Result<()> {
 
     let original_length2 = message2.len();
 
-    match aes::validate_and_remove_pkcs7_padding(&message2) {
+    match aes::pkcs7::validate_and_remove_pkcs7_padding(&message2) {
         Ok(_) => Err(AesError::InvalidData(format!("Unexpected padding at end of message")).into()),
         Err(_) => match expect_eq(
             original_length2,
@@ -571,7 +555,6 @@ pub fn challenge15() -> Result<()> {
 }
 
 pub fn challenge16() -> Result<()> {
-    use crate::errors::*;
     fn baconise(user_data: &[u8]) -> AesResult<Vec<u8>> {
         let mut res = b"comment1=cooking%20MCs;userdata=".to_vec();
 
@@ -589,21 +572,21 @@ pub fn challenge16() -> Result<()> {
         Ok(res)
     }
 
-    struct BackonCipher {
+    struct BaconCipher {
         key: [u8; 16],
     }
 
-    impl Cipher for BackonCipher {
+    impl aes::util::Cipher for BaconCipher {
         fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
             let baconised_text = baconise(plaintext)?;
-            aes::encrypt_cbc_128_zero_iv(&baconised_text, &self.key)
+            cbc::encrypt_cbc_128_zero_iv(&baconised_text, &self.key)
         }
         fn decrypt(&self, ciphertext: &[u8]) -> AesResult<Vec<u8>> {
-            aes::decrypt_cbc_128_zero_iv(ciphertext, &self.key)
+            cbc::decrypt_cbc_128_zero_iv(ciphertext, &self.key)
         }
     }
 
-    impl BackonCipher {
+    impl BaconCipher {
         pub fn find_bacon(&self, ciphertext: &[u8]) -> AesResult<bool> {
             let res = self.decrypt(ciphertext)?;
             let plaintext = String::from_utf8(res)?;
@@ -612,8 +595,8 @@ pub fn challenge16() -> Result<()> {
         }
     }
 
-    let bacon_oracle = BackonCipher {
-        key: aes::generate_rnd_key(),
+    let bacon_oracle = BaconCipher {
+        key: util::generate_rnd_key(),
     };
 
     let user_data = b"Hello my name is Paul";

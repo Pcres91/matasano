@@ -1,10 +1,17 @@
-use crate::aes::generate_rnd_key;
-use crate::aes::*;
-use crate::base64;
-use crate::challenges::print_challenge_result;
-use crate::common::*;
-use crate::errors::{AesError, Result};
-use crate::expectations::*;
+use crate::{
+    aes::{
+        cbc::{decrypt_cbc_128, encrypt_cbc_128},
+        util::generate_rnd_key,
+    },
+    base64,
+    challenges::print_challenge_result,
+    common::{
+        bit_ops::xor_with_single_byte,
+        util::until_err,
+        errors::{AesError, Result},
+        expectations::*,
+    },
+};
 use rand::{thread_rng, Rng};
 use std::convert::TryInto;
 use std::fs::File;
@@ -92,9 +99,11 @@ pub fn challenge17() -> Result<()> {
                     println!("onto next");
                     zeroing_iv[padding_iv.len() - pad_val as usize] = candidate ^ pad_val;
                     break;
-                }
-                else if candidate == 0xffu8 {
-                    return Err(AesError::Cbc128Error("Unable to find a suitable candidate".into()).into());
+                } else if candidate == 0xffu8 {
+                    return Err(AesError::Cbc128Error(
+                        "Unable to find a suitable candidate".into(),
+                    )
+                    .into());
                 }
             }
         }

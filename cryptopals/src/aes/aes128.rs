@@ -1,288 +1,6 @@
-use crate::{
-    common::{until_err, xor_16_bytes},
-    errors::{AesError, AesResult},
-    expectations::{expect_eq, expect_true},
-};
-use itertools::FoldWhile::{Continue, Done};
-use itertools::Itertools;
-use rayon::prelude::*;
-use std::convert::TryInto;
+use crate::{aes::util::Result, common::errors::AesError};
 
-type Result<T> = AesResult<T>;
-
-pub const KNOWN_KEY: [u8; 16] = [
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-];
-
-pub trait Cipher {
-    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>>;
-    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>>;
-}
-
-pub struct EcbCipher {
-    pub key: [u8; 16],
-}
-
-impl Cipher for EcbCipher {
-    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
-        encrypt_ecb_128(plaintext, &self.key)
-    }
-
-    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        decrypt_ecb_128(ciphertext, &self.key)
-    }
-}
-
-pub struct CbcCipher {
-    pub key: [u8; 16],
-    pub iv: Option<[u8; 16]>,
-}
-
-impl Cipher for CbcCipher {
-    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
-        match self.iv {
-            Some(x) => encrypt_cbc_128(plaintext, &self.key, &x),
-            None => encrypt_cbc_128_zero_iv(plaintext, &self.key),
-        }
-    }
-
-    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        match self.iv {
-            Some(x) => decrypt_cbc_128(ciphertext, &self.key, &x),
-            None => decrypt_cbc_128_zero_iv(ciphertext, &self.key),
-        }
-    }
-}
-
-pub fn encrypt_ecb_128(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let expanded_key = expand_key(key)?;
-
-    let block_byte_length = 16usize;
-
-    let blocks = pkcs7_pad(plaintext, block_byte_length)?;
-
-    Ok((blocks)
-        .chunks_exact(16)
-        .flat_map(|block| encrypt_block_128(block, &expanded_key))
-        .flatten()
-        .collect())
-}
-
-pub fn decrypt_ecb_128(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    if ciphertext.len() % 16 != 0 {
-        return Err(AesError::CipherTextLengthError);
-    }
-
-    if key.len() != 16 {
-        return Err(AesError::KeyLengthError);
-    }
-
-    let expanded_key = expand_key(key)?;
-
-    let mut blocks: Vec<u8> = ciphertext.to_vec();
-    for idx in (0..blocks.len()).step_by(16) {
-        decrypt_block_128_inplace(&mut blocks[idx..idx + 16], &expanded_key)?;
-    }
-
-    validate_and_remove_pkcs7_padding(&blocks)
-}
-
-/// ECB128 is stateless and deterministic. That is, the cipher will always be the same for a block
-/// of 16 bytes. So, this test finds if there are any blocks that are identical to each other in a
-/// text. If so, odds are it has been ECB 128 encrypted
-pub fn is_data_ecb128_encrypted(data: &[u8]) -> bool {
-    use std::collections::hash_set::HashSet;
-
-    let set: HashSet<[u8; 16]> = data
-        .par_chunks_exact(16)
-        .map(|x| x.try_into().unwrap()) // we know the op will succeed
-        .collect();
-    let num_unique_blocks = set.len();
-
-    let num_blocks = data.len() / 16;
-
-    num_blocks - num_unique_blocks > 1
-}
-
-pub fn find_ecb_128_padded_block_cipher(oracle: &impl Cipher) -> Result<Vec<u8>> {
-    let padding = vec![16u8; 32 + 15];
-
-    let ciphertext = oracle.encrypt(&padding)?;
-
-    let mut prev_block = &ciphertext[0..16];
-    for idx in (16..ciphertext.len()).step_by(16) {
-        if prev_block == &ciphertext[idx..idx + 16] {
-            return Ok(prev_block.to_vec());
-        }
-
-        prev_block = &ciphertext[idx..idx + 16];
-    }
-
-    Err(AesError::Ecb128Error(format!(
-        "Could not find padding ciphertext"
-    )))
-}
-
-pub fn encrypt_cbc_128_zero_iv(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let iv = vec![0u8; 16];
-    encrypt_cbc_128(plaintext, key, &iv)
-}
-
-pub fn encrypt_cbc_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
-    let expanded_key = expand_key(key)?;
-
-    let padding = get_pkcs7_padding_for(plaintext, 16)?;
-
-    let plaintext_blocks = [plaintext, &padding].concat();
-
-    expect_true(
-        plaintext_blocks.len() % 16 == 0,
-        format!(
-            "plaintext must be composed of 16 byte blocks, got length {}",
-            plaintext_blocks.len()
-        )
-        .as_str(),
-    )?;
-
-    let mut ciphertext = vec![0u8; 0];
-
-    // for each plaintext block...
-    for idx in (0..plaintext_blocks.len()).step_by(16) {
-        // XOR with previous block...
-        let block = if idx == 0 {
-            xor_16_bytes(&plaintext_blocks[idx..idx + 16], &iv)
-        } else {
-            xor_16_bytes(&plaintext_blocks[idx..idx + 16], &ciphertext[idx - 16..idx])
-        };
-        // and encrypt the block
-        ciphertext.extend_from_slice(&encrypt_block_128(&block, &expanded_key)?);
-    }
-    Ok(ciphertext)
-}
-
-pub fn decrypt_cbc_128_zero_iv(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let iv = [0u8; 16];
-    decrypt_cbc_128(ciphertext, key, &iv)
-}
-
-pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8; 16]) -> Result<Vec<u8>> {
-    let expanded_key = expand_key(key)?;
-
-    let mut plaintext = vec![0u8; 0];
-
-    // for each block...
-    for idx in (0..ciphertext.len()).step_by(16) {
-        // decrypt the block...
-        let block = decrypt_block_128(&ciphertext[idx..idx + 16], &expanded_key)?;
-
-        // XOR with previous block...
-        plaintext.extend(if idx == 0 {
-            xor_16_bytes(&block, iv).to_vec()
-        } else {
-            xor_16_bytes(&block, &ciphertext[idx - 16..idx]).to_vec()
-        })
-    }
-
-    // and remove the padding
-    plaintext = validate_and_remove_pkcs7_padding(&plaintext)?;
-
-    Ok(plaintext)
-}
-
-pub fn generate_rnd_key() -> [u8; 16] {
-    extern crate rand;
-    use rand::prelude::*;
-
-    let mut rng = rand::thread_rng();
-
-    let mut key = [0u8; 16];
-    rng.fill_bytes(&mut key);
-
-    key
-}
-
-#[derive(Debug, PartialEq)]
-pub enum EncryptionType {
-    Ecb128,
-    Cbc128,
-}
-
-/// Takes the plaintext, adds 0-5bytes prefix, adds 0-5bytes suffix, and then
-/// randomly encrypts with either ecb128 or cbc128. Returned is the ciphertext
-/// with a boolean: true = ecb128 encrypted, false = cbc128 encrypted
-pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> {
-    let key = generate_rnd_key();
-
-    extern crate rand;
-    use rand::prelude::*;
-    let mut rng = rand::thread_rng();
-
-    // extend plain text with 5-10 bytes at the start and end
-    let num_prefix_bytes: usize = rng.gen_range(5..=10);
-    let mut prefix = vec![0u8; num_prefix_bytes];
-    rng.fill_bytes(&mut prefix);
-
-    let num_suffix_bytes: usize = rng.gen_range(5..=10);
-    let mut suffix = vec![0u8; num_suffix_bytes];
-    rng.fill_bytes(&mut suffix);
-
-    let mut new_plaintext: Vec<u8> = Vec::new();
-    new_plaintext.extend_from_slice(&prefix);
-    new_plaintext.extend_from_slice(plaintext);
-    new_plaintext.extend_from_slice(&suffix);
-
-    pkcs7_pad(&mut new_plaintext, 16)?;
-
-    // select to either encrypt ecb/cbc
-    let ecb_encrypt: bool = rng.gen();
-
-    // println!("ecb encryption: {}", ecb_encrypt);
-
-    if ecb_encrypt {
-        Ok((
-            encrypt_ecb_128(&new_plaintext, &key)?,
-            EncryptionType::Ecb128,
-        ))
-    } else {
-        let iv: [u8; 16] = rng.gen();
-        Ok((
-            encrypt_cbc_128(&new_plaintext, &key, &iv)?,
-            EncryptionType::Cbc128,
-        ))
-    }
-}
-
-pub fn detect_encryption_mode(ciphertext: &[u8]) -> EncryptionType {
-    match is_data_ecb128_encrypted(ciphertext) {
-        true => EncryptionType::Ecb128,
-        false => EncryptionType::Cbc128,
-    }
-}
-
-/// prefix some plaintext with a single character. Encrypt. Continue, adding another instance of the character each time,
-/// until Pkcs7 padding has increased the length of the ciphertext - the difference in the lengths of the two ciphers is
-/// the block length
-pub fn find_block_length(oracle: &impl Cipher) -> Result<usize> {
-    let original_length = oracle.encrypt(&vec![b'a'; 0])?.len();
-
-    let mut err = Ok(());
-    let block_length = (0..0xff)
-        .into_iter()
-        .map(|i| oracle.encrypt(&vec![b'a'; i]))
-        .scan(&mut err, until_err)
-        .fold_while(0usize, |_, ciphertext| {
-            if ciphertext.len() == original_length {
-                Continue(0)
-            } else {
-                Done(ciphertext.len() - original_length)
-            }
-        })
-        .into_inner();
-    err?;
-    Ok(block_length)
-}
-
-fn encrypt_block_128(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> {
+pub fn encrypt_block_128(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }
@@ -305,7 +23,7 @@ fn encrypt_block_128(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> 
 }
 
 #[allow(dead_code)]
-fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
+pub fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }
@@ -325,13 +43,13 @@ fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()
     Ok(())
 }
 
-fn decrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
     let mut plainblock = block.to_vec();
     decrypt_block_128_inplace(&mut plainblock, &expanded_key)?;
     Ok(plainblock)
 }
 
-fn decrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
+pub fn decrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }
@@ -355,7 +73,7 @@ fn decrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()
 }
 
 /// takes the key and performs 11 rounds to expand the key
-fn expand_key(key: &[u8]) -> Result<[u8; 176]> {
+pub fn expand_key(key: &[u8]) -> Result<[u8; 176]> {
     if key.len() != 16 {
         return Err(AesError::KeyLengthError);
     }
@@ -387,7 +105,7 @@ fn expand_key(key: &[u8]) -> Result<[u8; 176]> {
     Ok(expanded_key)
 }
 
-fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>> {
+pub fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>> {
     if word_in.len() != 4 {
         return Err(AesError::InvalidLength(format!(
             "Word must be 4 bytes, got {}",
@@ -408,7 +126,7 @@ fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>> {
     xor_words(&tmp, &arr2)
 }
 
-fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>> {
+pub fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>> {
     if l.len() != 4 {
         return Err(AesError::InvalidData(format!(
             "xor_words(): l must be 4 bytes, got {}",
@@ -425,7 +143,7 @@ fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>> {
     Ok(vec![l[0] ^ r[0], l[1] ^ r[1], l[2] ^ r[2], l[3] ^ r[3]])
 }
 
-fn apply_key(state: &mut [u8], key: &[u8]) -> Result<()> {
+pub fn apply_key(state: &mut [u8], key: &[u8]) -> Result<()> {
     if key.len() != 16 {
         return Err(AesError::InvalidData(format!(
             "apply_key(): Key must be 16 bytes. Got {}",
@@ -446,7 +164,7 @@ fn apply_key(state: &mut [u8], key: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
+pub fn mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
     // row 0 doesn't change
     // row 1 rotated left once
     // row 2 rotated left twice
@@ -484,7 +202,7 @@ fn mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
     Ok(())
 }
 
-fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
+pub fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
     // row 0 doesn't change
     // row 1 rotated right once
     // row 2 rotated right twice
@@ -520,7 +238,7 @@ fn inverse_mix_and_sub_rows(state: &mut [u8]) -> Result<()> {
     Ok(())
 }
 
-fn mix_columns(state: &mut [u8]) -> Result<()> {
+pub fn mix_columns(state: &mut [u8]) -> Result<()> {
     if state.len() != 16 {
         return Err(AesError::InvalidData(format!(
             "state must be 16 bytes in length, got {}",
@@ -551,7 +269,7 @@ fn mix_columns(state: &mut [u8]) -> Result<()> {
     Ok(())
 }
 
-fn inverse_mix_columns(state: &mut [u8]) -> Result<()> {
+pub fn inverse_mix_columns(state: &mut [u8]) -> Result<()> {
     if state.len() != 16 {
         return Err(AesError::InvalidData(format!(
             "state must be 16 bytes in length, got {}",
@@ -739,311 +457,3 @@ const MUL_14: [u8; 256] = [
 const RCON: [u8; 11] = [
     0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
 ];
-
-/// looks for space, lowercase, uppercase, newline/tab/etc, numbers, then rest
-/// could be sped up more using common::common_letter_freqs, but this already
-/// reduces number of checks by ~5-6x compared to 0u8..0xff
-pub const SMART_ASCII: [u8; 255] = [
-    32, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
-    116, 117, 118, 119, 120, 121, 122, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
-    80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 39, 9, 10, 11, 12, 13, 40, 41, 42, 43, 44, 45, 46,
-    47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 33, 34, 35, 36, 37, 38,
-    91, 92, 93, 94, 95, 96, 1, 2, 3, 4, 5, 6, 7, 8, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-    26, 27, 28, 29, 30, 31, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136,
-    137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
-    156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
-    175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193,
-    194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212,
-    213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231,
-    232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250,
-    251, 252, 253, 254, 255,
-];
-
-/// returns just the bytes which will pad the plaintext
-pub fn get_pkcs7_padding_for(plaintext: &[u8], block_byte_length: usize) -> Result<Vec<u8>> {
-    let final_block_len = plaintext.len() % block_byte_length;
-
-    let padding_len = if block_byte_length - final_block_len == 0 {
-        block_byte_length
-    } else {
-        block_byte_length - final_block_len
-    };
-
-    if padding_len > 0xff {
-        return Err(AesError::PKCS7PaddingTooLongError);
-    }
-
-    Ok(vec![padding_len as u8; padding_len])
-}
-
-/// returns the plaintext + pkcs7padding
-pub fn pkcs7_pad(plaintext: &[u8], block_byte_length: usize) -> Result<Vec<u8>> {
-    let final_block_len = plaintext.len() % block_byte_length;
-
-    let mut blocks = plaintext.to_vec();
-
-    let mut bytes_to_pad_length = block_byte_length - final_block_len;
-    if bytes_to_pad_length == 0 {
-        bytes_to_pad_length = block_byte_length;
-    }
-    if bytes_to_pad_length > 0xff {
-        return Err(AesError::PKCS7PaddingTooLongError);
-    }
-
-    // pad with bytes of the length of padding
-    let padding = vec![bytes_to_pad_length as u8; bytes_to_pad_length];
-
-    blocks.extend_from_slice(&padding);
-    Ok(blocks)
-}
-
-/// adds the pkcs7padding to the message
-pub fn pkcs7_pad_inplace(message: &mut Vec<u8>, block_byte_length: usize) -> Result<()> {
-    let final_block_len = message.len() % block_byte_length;
-
-    let mut num_padded_bytes = block_byte_length - final_block_len;
-    if num_padded_bytes == 0 {
-        num_padded_bytes = block_byte_length;
-    }
-    if num_padded_bytes > 0xff {
-        return Err(AesError::PKCS7PaddingTooLongError);
-    }
-
-    // pad with bytes of the length of padding
-    let padding = vec![num_padded_bytes as u8; num_padded_bytes];
-
-    message.extend_from_slice(&padding);
-
-    Ok(())
-}
-
-pub fn is_pkcs7_padding_valid_for(data: &[u8], block_length: usize) -> Result<bool> {
-    expect_eq(
-        0,
-        data.len() % block_length,
-        "validate_pkcs7_padding: data must be divisible by block length",
-    )?;
-
-    // check valid padding
-    let last_val = data[data.len() - 1];
-
-    if last_val as usize > data.len() || last_val == 0 {
-        return Ok(false);
-    };
-
-    Ok(data[data.len() - last_val as usize..]
-        .into_iter()
-        .all_equal())
-}
-
-pub fn validate_and_remove_pkcs7_padding(data: &[u8]) -> Result<Vec<u8>> {
-    println!("validate {:?}", data);
-    match is_pkcs7_padding_valid_for(&data, 16)? {
-        true => (),
-        false => {
-            return Err(AesError::InvalidPkcs7Padding(
-                data[data.len() - 16..].to_vec(),
-            ))
-        }
-    }
-
-    Ok(data[..data.len() - data[data.len() - 1] as usize].to_vec())
-}
-
-#[allow(dead_code)]
-fn print_state(state: &[u8]) {
-    println!();
-    for i in 0..4 {
-        println!(
-            "|{:2x} {:2x} {:2x} {:2x}|",
-            state[i],
-            state[i + 4],
-            state[i + 8],
-            state[i + 12]
-        );
-    }
-    println!();
-}
-
-#[cfg(test)]
-mod aes_tests {
-    use crate::expectations::expect_false;
-
-    use super::*;
-
-    #[test]
-    fn test_pkcs7_pads_entirely_new_block() {
-        let block_size = 16;
-        let mut block = vec![0u8; block_size];
-        let copy = block.clone();
-        pkcs7_pad_inplace(&mut block, block_size).unwrap();
-
-        assert_eq!(copy.len() + block_size, block.len());
-    }
-
-    #[test]
-    fn test_pkcs_remove_padding() {
-        let mut message = vec![0u8; 12];
-        message.extend_from_slice(&[4u8; 4]);
-
-        let res = validate_and_remove_pkcs7_padding(&message);
-
-        match res {
-            Ok(r) => assert_eq!(message.len() - 4, r.len()),
-            Err(_) => assert_eq!(true, false),
-        }
-    }
-
-    #[test]
-    fn test_pkcs_remove_padding_failure() {
-        let mut message = vec![0u8; 12];
-        message.extend_from_slice(&[4u8; 2]);
-
-        let original_length = message.len();
-
-        match validate_and_remove_pkcs7_padding(&message) {
-            Ok(_) => assert!(false),
-            Err(_) => assert_eq!(original_length, message.len()),
-        };
-    }
-
-    #[test]
-    fn test_ecb_128_encryption() {
-        let plaintext = b"hello world";
-
-        let ciphertext = encrypt_ecb_128(plaintext, &KNOWN_KEY).unwrap();
-
-        let decrypted = decrypt_ecb_128(&ciphertext, &KNOWN_KEY).unwrap();
-
-        assert_eq!(plaintext.to_vec(), decrypted);
-    }
-
-    #[test]
-    fn test_cbc_128_encryption() {
-        let plaintext = b"Hello World!";
-
-        let ciphertext = encrypt_cbc_128_zero_iv(plaintext, &KNOWN_KEY).unwrap();
-
-        let decrypted = decrypt_cbc_128_zero_iv(&ciphertext, &KNOWN_KEY).unwrap();
-
-        assert_eq!(
-            String::from_utf8(plaintext.to_vec()),
-            String::from_utf8(decrypted)
-        );
-    }
-
-    #[test]
-    fn test_cbc_against_known_values() {
-        // values taken from https://docs.rs/cbc/latest/cbc/#
-        use hex_literal::hex;
-        let key = [0x42; 16];
-        let iv = [0x24; 16];
-        let plaintext_expected = *b"hello world! this is my plaintext.";
-        let ciphertext_expected = hex!(
-            "c7fe247ef97b21f07cbdd26cb5d346bf"
-            "d27867cb00d9486723e159978fb9a5f9"
-            "14cfb228a710de4171e396e7b6cf859e"
-        );
-
-        let ciphertext = encrypt_cbc_128(&plaintext_expected, &key, &iv).unwrap();
-        expect_eq(
-            ciphertext_expected.len(),
-            ciphertext.len(),
-            "ciphertext length",
-        )
-        .unwrap();
-
-        for idx in 0..ciphertext.len() {
-            if ciphertext_expected[idx] != ciphertext[idx] {
-                println!(
-                    "Failure at idx {}.\nexpected: {:?}\ngot: {:?}",
-                    idx,
-                    &ciphertext_expected[idx..],
-                    &ciphertext[idx..]
-                );
-                assert!(false);
-            }
-        }
-
-        let plaintext = decrypt_cbc_128(&ciphertext, &key, &iv).unwrap();
-        expect_eq(&plaintext_expected[..], &plaintext, "decrypting").unwrap();
-    }
-
-    #[test]
-    fn test_finding_block_length() {
-        let unknown_text = crate::base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK").unwrap();
-
-        struct ConcattorEcbCipher {
-            key: [u8; 16],
-            unknown_text: Vec<u8>,
-        }
-
-        impl Cipher for ConcattorEcbCipher {
-            fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
-                let mut concatted = plaintext.to_vec();
-                concatted.extend_from_slice(&self.unknown_text);
-                encrypt_ecb_128(&concatted, &self.key)
-            }
-            fn decrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
-                decrypt_ecb_128(plaintext, &self.key)
-            }
-        }
-
-        let oracle = ConcattorEcbCipher {
-            key: generate_rnd_key(),
-            unknown_text: unknown_text.to_vec(),
-        };
-
-        expect_eq(
-            16,
-            find_block_length(&oracle).unwrap(),
-            "Finding block length",
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn test_padding_validity_returned_when_encrypting_block() {
-        let mut data = [vec![0u8; 14], vec![0x2u8; 2]].concat();
-        expect_true(
-            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
-            "Testing valid padding is validated",
-        )
-        .unwrap();
-
-        data = [vec![1u8; 16], vec![0xfu8; 16]].concat();
-        expect_true(
-            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
-            "Testing valid full padding block",
-        )
-        .unwrap();
-
-        data = [vec![1u8; 15], vec![0xffu8; 1]].concat();
-        expect_false(
-            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
-            "Testing 0xff final block on bad padding",
-        )
-        .unwrap();
-
-        data = [vec![1u8; 14], vec![0x3u8; 2]].concat();
-        expect_false(
-            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
-            "Testing one too few values is invalid",
-        )
-        .unwrap();
-
-        data = [vec![1u8; 12], vec![0x3u8; 4]].concat();
-        expect_true(
-            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
-            "Testing one too many values is valid",
-        )
-        .unwrap();
-
-        data = [vec![1u8; 15], vec![0x0u8; 1]].concat();
-        expect_false(
-            is_pkcs7_padding_valid_for(&data, 16).unwrap(),
-            "Testing last value is 0 returns invalid",
-        )
-        .unwrap();
-    }
-}
