@@ -10,7 +10,6 @@ use std::io::Cursor;
 extern crate hex;
 extern crate num_traits;
 
-pub struct Wrap(pub Vec<u8>);
 
 pub fn until_err<T, E>(
     err: &mut &mut std::result::Result<(), E>,
@@ -24,6 +23,8 @@ pub fn until_err<T, E>(
         }
     }
 }
+
+pub struct Wrap(pub Vec<u8>);
 
 impl fmt::Display for Wrap {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -277,3 +278,19 @@ pub const SMART_ASCII: [u8; 255] = [
     232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250,
     251, 252, 253, 254, 255,
 ];
+
+#[cfg(test)]
+mod common_util_tests {
+    use crate::common::expectations::expect_eq;
+
+    use super::hex_string_to_vec_u8;
+
+    #[test]
+    fn test_hex_string_to_u8() {
+        let expected = b"YELLOW SUBMARINE";
+
+        let res = hex_string_to_vec_u8(b"59454c4c4f57205355424d4152494e45").unwrap();
+
+        expect_eq(expected.to_vec(), res, "hex_string_to_u8").unwrap();
+    }
+}

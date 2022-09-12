@@ -1,4 +1,7 @@
-use crate::{aes::util::Result, common::errors::AesError};
+use crate::{
+    aes::util::Result,
+    common::{bit_ops::xor_bytes, errors::AesError},
+};
 
 pub fn encrypt_block(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> {
     if expanded_key.len() != 176 {
@@ -123,24 +126,10 @@ pub fn g(word_in: &[u8], rcon_idx: usize) -> Result<Vec<u8>> {
 
     // xor with round constant rcon
     let arr2 = [RCON[rcon_idx], 0, 0, 0];
-    xor_words(&tmp, &arr2)
-}
-
-pub fn xor_words(l: &[u8], r: &[u8]) -> Result<Vec<u8>> {
-    if l.len() != 4 {
-        return Err(AesError::InvalidData(format!(
-            "xor_words(): l must be 4 bytes, got {}",
-            l.len()
-        )));
+    match xor_bytes(&tmp, &arr2) {
+        Ok(res) => Ok(res),
+        Err(_) => Err(AesError::InvalidData("xor_bytes failed".into())),
     }
-    if r.len() != 4 {
-        return Err(AesError::InvalidData(format!(
-            "xor_words(): r must be 4 bytes, got {}",
-            r.len()
-        )));
-    }
-
-    Ok(vec![l[0] ^ r[0], l[1] ^ r[1], l[2] ^ r[2], l[3] ^ r[3]])
 }
 
 pub fn apply_key(state: &mut [u8], key: &[u8]) -> Result<()> {

@@ -1,12 +1,16 @@
+#[allow(unused_imports)]
 use crate::{
-    aes::{util::generate_rnd_key, *},
+    aes::{
+        util::{generate_rnd_key, Cipher},
+        *,
+    },
     base64,
     challenges::print_challenge_result,
     common::{
         bit_ops::xor_with_single_byte,
         errors::{AesError, Result},
         expectations::*,
-        util::until_err,
+        util::{until_err, Wrap},
     },
 };
 use rand::{thread_rng, Rng};
@@ -15,7 +19,8 @@ use std::fs::File;
 use std::io::{prelude::*, BufReader};
 
 pub fn set3() {
-    print_challenge_result(17, &challenge17);
+    // print_challenge_result(17, &challenge17);
+    print_challenge_result(18, &challenge18);
 }
 
 /// CBC padding oracle best explained here https://research.nccgroup.com/2021/02/17/cryptopals-exploiting-cbc-padding-oracles/
@@ -37,20 +42,23 @@ pub fn challenge17() -> Result<()> {
     }
 
     let oracle = CbcOracleMutIv {
-        key: generate_rnd_key(),
-        // iv: (50..50 + 16).rev().collect::<Vec<u8>>().try_into().unwrap(),
-        iv: generate_rnd_key(),
+        // key: generate_rnd_key(),
+        // iv: generate_rnd_key(),
+        key: (0..16u8)
+            .into_iter()
+            .collect::<Vec<u8>>()
+            .try_into()
+            .unwrap(),
+        iv: (16..32u8)
+            .into_iter()
+            .collect::<Vec<u8>>()
+            .try_into()
+            .unwrap(),
     };
 
-    let plaintext_real = lines[
-        // thread_rng().gen_range(0..lines.len())
-        1
-        ]
-    .clone();
+    let plaintext_real = lines[thread_rng().gen_range(0..lines.len())].clone();
 
     let encryptor = || -> Result<(Vec<u8>, [u8; 16])> {
-        // let rng = thread_rng();
-
         let ciphertext = cbc::encrypt_128(&plaintext_real[0..16], &oracle.key, &oracle.iv)?;
         Ok((ciphertext, oracle.iv.clone()))
     };
@@ -74,26 +82,26 @@ pub fn challenge17() -> Result<()> {
 
     let (ciphertext, _) = encryptor()?;
 
-    let single_block_attack = |block: &[u8; 16]| -> Result<Vec<u8>> {
-        let mut zeroing_iv = [0u8; 16];
+    // for each block, decrypt using the padded block cipher
+    let single_block_attack = |block: &[u8; 16], previous_block: &[u8; 16]| -> Result<Vec<u8>> {
+        let mut zeroing_iv = previous_block.clone();
 
         for pad_val in 1..=16 {
             let mut padding_iv: [u8; 16] = xor_with_single_byte(block, pad_val).try_into().unwrap();
 
             for candidate in 0..=0xffu8 {
-                print!("j: {:3} ", candidate);
+                // print!("j: {:3} ", candidate);
                 padding_iv[padding_iv.len() - pad_val as usize] = candidate;
 
                 if decryptor(block, &padding_iv).0 {
-                    println!("here");
                     if pad_val == 1 {
                         padding_iv[padding_iv.len() - pad_val as usize - 1] ^= 1;
                         if !decryptor(block, &padding_iv).0 {
+                            println!("false positive, continuing...");
                             continue;
                         }
                     }
 
-                    println!("onto next");
                     zeroing_iv[padding_iv.len() - pad_val as usize] = candidate ^ pad_val;
                     break;
                 } else if candidate == 0xffu8 {
@@ -108,25 +116,65 @@ pub fn challenge17() -> Result<()> {
         Ok(zeroing_iv.to_vec())
     };
 
-    let block: &[u8; 16] = &ciphertext[0..16].try_into().unwrap();
+    // let block: &[u8; 16] = &ciphertext[ciphertext.len() - 16..].try_into().unwrap();
+    // let plaintext_block = single_block_attack(block, &oracle.iv)?;
 
-    let plaintext_block = single_block_attack(block)?;
+    let plaintext: Vec<u8> = ciphertext
+        .chunks_exact(16)
+        .rev()
+        .flat_map(|block| single_block_attack(&block.try_into().unwrap(), &oracle.iv))
+        .flatten()
+        .collect();
 
-    println!("plaintext_block: {:?}", plaintext_block);
+    expect_eq(
+        plaintext_real,
+        plaintext,
+        "Implementing padding oracle attack",
+    )?;
+    Ok(())
+}
 
-    println!("expected: {:?}", &plaintext_real[..16]);
+pub fn challenge18() -> Result<()> {
+    let ciphertext = base64::decode(
+        b"L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==",
+    )?;
+    let expected = b"Yo, VIP Let's kick it Ice, Ice, baby Ice, Ice, baby ";
 
-    // println!("Decryptor succeeded on {}", c);
+    let cipher = ctr::CtrCipher {
+        key: b"YELLOW SUBMARINE".to_owned(),
+        nonce: 0,
+    };
 
-    expect_eq(1, 1, "challenge 17 result")?;
+    let plaintext = cipher.decrypt(&ciphertext)?;
+
+    expect_eq(expected.to_vec(), plaintext, "decrypting CTR")?;
+
+    let pt2 = b"hello hi hi I'm so fly like a pie high in sky don't say why?";
+
+    let cipher2 = ctr::CtrCipher {
+        key: generate_rnd_key(),
+        nonce: 0xaabbccddeeff0011,
+    };
+
+    let ct = cipher2.encrypt(pt2)?;
+    expect_eq(
+        pt2.to_vec(),
+        cipher2.decrypt(&ct)?,
+        "Own message CTR cipher",
+    )?;
+
     Ok(())
 }
 
 #[cfg(test)]
-mod ch17 {
+mod set3_tests {
     use super::*;
     #[test]
     fn test_challenge17() {
         challenge17().unwrap();
+    }
+    #[test]
+    fn test_challenge18() {
+        challenge18().unwrap();
     }
 }

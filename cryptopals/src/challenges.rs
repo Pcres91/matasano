@@ -43,7 +43,7 @@ pub fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Res
     match challenge() {
         Ok(_) => println!("SUCCESSFUL: Challenge {challenge_number}"),
         Err(error) => {
-            println!("FAILED:     Challenge {challenge_number}, {error}\n\n{error:?}");
+            println!("FAILED:     Challenge {challenge_number}, {error}\n\n{:#?}", error);
         }
     }
     println!("-----{:.2?}-----", timer.elapsed());

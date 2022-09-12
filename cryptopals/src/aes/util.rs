@@ -132,7 +132,7 @@ pub fn find_block_length(oracle: &impl Cipher) -> Result<usize> {
 #[cfg(test)]
 mod aes_tests {
     use super::*;
-    use crate::{aes::*, base64, common::expectations::expect_eq};
+    use crate::{base64, common::expectations::expect_eq};
 
     #[test]
     fn test_finding_block_length() {

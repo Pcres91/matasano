@@ -16,7 +16,7 @@ pub fn char_bytes_to_base64(bytes: &[u8]) -> Result<String> {
 /// Takes a slice and encodes every 6 bits and encodes into base64
 pub fn encode(bytes: &[u8]) -> Result<Vec<char>> {
     let num_bits = bytes.len() * 8;
-    expect_eq(0, num_bits % 6, "num bits is a factor of 6")?;
+    expect_eq(0, num_bits % 6, &format!("num bits is a factor of 6, got length {num_bits}"))?;
     let num_chars = num_bits / 6;
 
     let mut cursor = Cursor::new(&bytes);

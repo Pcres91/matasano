@@ -26,7 +26,7 @@ pub enum CryptoError {
 
 #[derive(Debug, Error)]
 pub enum ExpectationFailure {
-    #[error("Expected {expected}, got {actual}. {message}")]
+    #[error("Expected\n{expected}\nactual\n{actual}\n{message}")]
     ExpectEqualFailure {
         expected: String,
         actual: String,

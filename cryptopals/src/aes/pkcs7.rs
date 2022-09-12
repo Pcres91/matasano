@@ -80,7 +80,7 @@ pub fn is_padding_valid_for(data: &[u8], block_length: usize) -> Result<bool> {
 }
 
 pub fn validate_and_remove_padding(data: &[u8]) -> Result<Vec<u8>> {
-    println!("validate {:?}", data);
+    // println!("validate {:?}", data);
     match is_padding_valid_for(&data, 16)? {
         true => (),
         false => {
