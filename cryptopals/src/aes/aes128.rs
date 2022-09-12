@@ -1,6 +1,6 @@
 use crate::{aes::util::Result, common::errors::AesError};
 
-pub fn encrypt_block_128(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> {
+pub fn encrypt_block(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }
@@ -23,7 +23,7 @@ pub fn encrypt_block_128(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u
 }
 
 #[allow(dead_code)]
-pub fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
+pub fn encrypt_block_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }
@@ -43,13 +43,13 @@ pub fn encrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Resul
     Ok(())
 }
 
-pub fn decrypt_block_128(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt_block(block: &[u8], expanded_key: &[u8]) -> Result<Vec<u8>> {
     let mut plainblock = block.to_vec();
-    decrypt_block_128_inplace(&mut plainblock, &expanded_key)?;
+    decrypt_block_inplace(&mut plainblock, &expanded_key)?;
     Ok(plainblock)
 }
 
-pub fn decrypt_block_128_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
+pub fn decrypt_block_inplace(block: &mut [u8], expanded_key: &[u8]) -> Result<()> {
     if expanded_key.len() != 176 {
         return Err(AesError::ExpandedKeyLengthError);
     }

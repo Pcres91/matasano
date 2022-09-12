@@ -27,7 +27,7 @@ impl ProfileStorage {
     }
 
     pub fn add_from_hash(&mut self, hash: &[u8]) -> Result<()> {
-        let cookie = ecb::decrypt_ecb_128(hash, &RND_KEY)?;
+        let cookie = ecb::decrypt_128(hash, &RND_KEY)?;
 
         self.profiles
             .push(parse_cookie(std::str::from_utf8(&cookie)?)?);
@@ -76,7 +76,7 @@ pub fn parse_cookie(cookie: &str) -> Result<Profile> {
         uid: tokens[3].parse::<u32>().unwrap(),
         role: new_role,
         encoded_str: cookie.to_string(),
-        hash: ecb::encrypt_ecb_128(&cookie.as_bytes(), &RND_KEY)?,
+        hash: ecb::encrypt_128(&cookie.as_bytes(), &RND_KEY)?,
     })
 }
 
@@ -93,7 +93,7 @@ pub unsafe fn create_hash_profile_for(email: &str) -> Result<Vec<u8>> {
         ProfileRole::User
     );
 
-    match ecb::encrypt_ecb_128(&output[..].as_bytes(), &RND_KEY) {
+    match ecb::encrypt_128(&output[..].as_bytes(), &RND_KEY) {
         Ok(res) => Ok(res),
         Err(error) => Err(error.into()),
     }

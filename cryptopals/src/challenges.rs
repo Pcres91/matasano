@@ -204,7 +204,7 @@ pub fn challenge8() -> Result<()> {
         .par_bridge()
         .map(|(line_num, line)| (line_num, hex_string_to_vec_u8(line.as_bytes())))
         .filter(|(_, line)| line.is_ok())
-        .filter(|(_, line)| ecb::is_data_ecb128_encrypted(line.as_deref().unwrap()))
+        .filter(|(_, line)| util::is_data_ecb128_encrypted(line.as_deref().unwrap()))
         .map(|(line_num, _)| line_num)
         .collect();
 
@@ -226,7 +226,7 @@ pub fn challenge9() -> Result<()> {
     let mut msg = b"YELLOW SUBMARINE".to_vec();
     let key_len = 20;
 
-    let padded = pkcs7_pad(&mut msg, key_len)?;
+    let padded = pad(&mut msg, key_len)?;
 
     let mut expected = msg.clone();
     expected.extend_from_slice(&vec![4; 4]);
@@ -302,10 +302,10 @@ pub fn challenge12() -> Result<()> {
         fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
             let mut concatted = plaintext.to_vec();
             concatted.extend_from_slice(&self.unknown_text);
-            ecb::encrypt_ecb_128(&concatted, &self.key)
+            ecb::encrypt_128(&concatted, &self.key)
         }
         fn decrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
-            ecb::decrypt_ecb_128(plaintext, &self.key)
+            ecb::decrypt_128(plaintext, &self.key)
         }
     }
 
@@ -320,7 +320,7 @@ pub fn challenge12() -> Result<()> {
     expect_eq(16, block_size, "Finding block length of encryption oracle")?;
 
     // find whether it's in ecb 128 mode
-    if !aes::ecb::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?) {
+    if !aes::util::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?) {
         return Err(AesError::InvalidData(
             "Could not assert that the data is aes-ecb-128 encrypted".to_string(),
         )
@@ -417,7 +417,7 @@ pub fn challenge14() -> Result<()> {
     fn encrypt_with_rnd_prefix(plaintext: &[u8], key: &[u8]) -> AesResult<Vec<u8>> {
         let rnd_bytes_range = (0, 50);
         let text = common::util::prefix_with_rnd_bytes(rnd_bytes_range, &plaintext);
-        aes::ecb::encrypt_ecb_128(&text, &key)
+        ecb::encrypt_128(&text, &key)
     }
 
     struct Ch14Cipher {
@@ -429,7 +429,7 @@ pub fn challenge14() -> Result<()> {
             encrypt_with_rnd_prefix(plaintext, &self.key)
         }
         fn decrypt(&self, ciphertext: &[u8]) -> AesResult<Vec<u8>> {
-            aes::ecb::decrypt_ecb_128(ciphertext, &self.key)
+            aes::ecb::decrypt_128(ciphertext, &self.key)
         }
     }
 
@@ -532,7 +532,7 @@ pub fn challenge15() -> Result<()> {
     let mut message = vec![0u8; 12];
     message.extend_from_slice(&[4u8; 4]);
 
-    let res = aes::pkcs7::validate_and_remove_pkcs7_padding(&message)?;
+    let res = aes::pkcs7::validate_and_remove_padding(&message)?;
 
     expect_eq(message.len() - 4, res.len(), "Message length")?;
 
@@ -541,7 +541,7 @@ pub fn challenge15() -> Result<()> {
 
     let original_length2 = message2.len();
 
-    match aes::pkcs7::validate_and_remove_pkcs7_padding(&message2) {
+    match aes::pkcs7::validate_and_remove_padding(&message2) {
         Ok(_) => Err(AesError::InvalidData(format!("Unexpected padding at end of message")).into()),
         Err(_) => match expect_eq(
             original_length2,
@@ -579,10 +579,10 @@ pub fn challenge16() -> Result<()> {
     impl aes::util::Cipher for BaconCipher {
         fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
             let baconised_text = baconise(plaintext)?;
-            cbc::encrypt_cbc_128_zero_iv(&baconised_text, &self.key)
+            cbc::encrypt_128_zero_iv(&baconised_text, &self.key)
         }
         fn decrypt(&self, ciphertext: &[u8]) -> AesResult<Vec<u8>> {
-            cbc::decrypt_cbc_128_zero_iv(ciphertext, &self.key)
+            cbc::decrypt_128_zero_iv(ciphertext, &self.key)
         }
     }
 

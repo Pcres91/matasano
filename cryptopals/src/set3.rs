@@ -1,15 +1,12 @@
 use crate::{
-    aes::{
-        cbc::{decrypt_cbc_128, encrypt_cbc_128},
-        util::generate_rnd_key,
-    },
+    aes::{util::generate_rnd_key, *},
     base64,
     challenges::print_challenge_result,
     common::{
         bit_ops::xor_with_single_byte,
-        util::until_err,
         errors::{AesError, Result},
         expectations::*,
+        util::until_err,
     },
 };
 use rand::{thread_rng, Rng};
@@ -54,12 +51,12 @@ pub fn challenge17() -> Result<()> {
     let encryptor = || -> Result<(Vec<u8>, [u8; 16])> {
         // let rng = thread_rng();
 
-        let ciphertext = encrypt_cbc_128(&plaintext_real[0..16], &oracle.key, &oracle.iv)?;
+        let ciphertext = cbc::encrypt_128(&plaintext_real[0..16], &oracle.key, &oracle.iv)?;
         Ok((ciphertext, oracle.iv.clone()))
     };
 
     let decryptor = |ciphertext_in: &[u8], iv_in: &[u8; 16]| -> (bool, Vec<u8>) {
-        let tmp = decrypt_cbc_128(&ciphertext_in, &oracle.key, iv_in);
+        let tmp = cbc::decrypt_128(&ciphertext_in, &oracle.key, iv_in);
         match tmp {
             Ok(x) => {
                 println!("success");

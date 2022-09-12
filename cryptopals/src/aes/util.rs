@@ -1,13 +1,12 @@
+use std::convert::TryInto;
+
 use crate::{
-    aes::{
-        cbc::encrypt_cbc_128,
-        ecb::{encrypt_ecb_128, is_data_ecb128_encrypted},
-        pkcs7::pkcs7_pad,
-    },
+    aes::*,
     common::{errors::AesResult, util::until_err},
 };
 use itertools::FoldWhile::{Continue, Done};
 use itertools::Itertools;
+use rayon::prelude::*;
 
 pub type Result<T> = AesResult<T>;
 
@@ -62,7 +61,7 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> 
     new_plaintext.extend_from_slice(plaintext);
     new_plaintext.extend_from_slice(&suffix);
 
-    pkcs7_pad(&mut new_plaintext, 16)?;
+    pkcs7::pad_inplace(&mut new_plaintext, 16)?;
 
     // select to either encrypt ecb/cbc
     let ecb_encrypt: bool = rng.gen();
@@ -71,16 +70,33 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> 
 
     if ecb_encrypt {
         Ok((
-            encrypt_ecb_128(&new_plaintext, &key)?,
+            ecb::encrypt_128(&new_plaintext, &key)?,
             EncryptionType::Ecb128,
         ))
     } else {
         let iv: [u8; 16] = rng.gen();
         Ok((
-            encrypt_cbc_128(&new_plaintext, &key, &iv)?,
+            cbc::encrypt_128(&new_plaintext, &key, &iv)?,
             EncryptionType::Cbc128,
         ))
     }
+}
+
+/// ECB128 is stateless and deterministic. That is, the cipher will always be the same for a block
+/// of 16 bytes. So, this test finds if there are any blocks that are identical to each other in a
+/// text. If so, odds are it has been ECB 128 encrypted
+pub fn is_data_ecb128_encrypted(data: &[u8]) -> bool {
+    use std::collections::hash_set::HashSet;
+
+    let set: HashSet<[u8; 16]> = data
+        .par_chunks_exact(16)
+        .map(|x| x.try_into().unwrap()) // we know the op will succeed
+        .collect();
+    let num_unique_blocks = set.len();
+
+    let num_blocks = data.len() / 16;
+
+    num_blocks - num_unique_blocks > 1
 }
 
 pub fn detect_encryption_mode(ciphertext: &[u8]) -> EncryptionType {
@@ -116,11 +132,7 @@ pub fn find_block_length(oracle: &impl Cipher) -> Result<usize> {
 #[cfg(test)]
 mod aes_tests {
     use super::*;
-    use crate::{
-        aes::ecb::{decrypt_ecb_128, encrypt_ecb_128},
-        base64,
-        common::expectations::expect_eq,
-    };
+    use crate::{aes::*, base64, common::expectations::expect_eq};
 
     #[test]
     fn test_finding_block_length() {
@@ -135,10 +147,10 @@ mod aes_tests {
             fn encrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
                 let mut concatted = plaintext.to_vec();
                 concatted.extend_from_slice(&self.unknown_text);
-                encrypt_ecb_128(&concatted, &self.key)
+                ecb::encrypt_128(&concatted, &self.key)
             }
             fn decrypt(&self, plaintext: &[u8]) -> AesResult<Vec<u8>> {
-                decrypt_ecb_128(plaintext, &self.key)
+                ecb::decrypt_128(plaintext, &self.key)
             }
         }
 

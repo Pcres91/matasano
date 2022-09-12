@@ -1,8 +1,8 @@
 use crate::{
     aes::{
-        aes128::{decrypt_block_128, encrypt_block_128, expand_key},
+        pkcs7::{get_padding_for, validate_and_remove_padding},
         util::{Cipher, Result},
-        pkcs7::{get_pkcs7_padding_for, validate_and_remove_pkcs7_padding},
+        *,
     },
     common::{bit_ops::xor_16_bytes, expectations::expect_true},
 };
@@ -15,28 +15,28 @@ pub struct CbcCipher {
 impl Cipher for CbcCipher {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
         match self.iv {
-            Some(x) => encrypt_cbc_128(plaintext, &self.key, &x),
-            None => encrypt_cbc_128_zero_iv(plaintext, &self.key),
+            Some(x) => encrypt_128(plaintext, &self.key, &x),
+            None => encrypt_128_zero_iv(plaintext, &self.key),
         }
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
         match self.iv {
-            Some(x) => decrypt_cbc_128(ciphertext, &self.key, &x),
-            None => decrypt_cbc_128_zero_iv(ciphertext, &self.key),
+            Some(x) => decrypt_128(ciphertext, &self.key, &x),
+            None => decrypt_128_zero_iv(ciphertext, &self.key),
         }
     }
 }
 
-pub fn encrypt_cbc_128_zero_iv(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+pub fn encrypt_128_zero_iv(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     let iv = vec![0u8; 16];
-    encrypt_cbc_128(plaintext, key, &iv)
+    encrypt_128(plaintext, key, &iv)
 }
 
-pub fn encrypt_cbc_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
-    let expanded_key = expand_key(key)?;
+pub fn encrypt_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
+    let expanded_key = aes128::expand_key(key)?;
 
-    let padding = get_pkcs7_padding_for(plaintext, 16)?;
+    let padding = get_padding_for(plaintext, 16)?;
 
     let plaintext_blocks = [plaintext, &padding].concat();
 
@@ -60,25 +60,25 @@ pub fn encrypt_cbc_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8
             xor_16_bytes(&plaintext_blocks[idx..idx + 16], &ciphertext[idx - 16..idx])
         };
         // and encrypt the block
-        ciphertext.extend_from_slice(&encrypt_block_128(&block, &expanded_key)?);
+        ciphertext.extend_from_slice(&aes128::encrypt_block(&block, &expanded_key)?);
     }
     Ok(ciphertext)
 }
 
-pub fn decrypt_cbc_128_zero_iv(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt_128_zero_iv(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     let iv = [0u8; 16];
-    decrypt_cbc_128(ciphertext, key, &iv)
+    decrypt_128(ciphertext, key, &iv)
 }
 
-pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8; 16]) -> Result<Vec<u8>> {
-    let expanded_key = expand_key(key)?;
+pub fn decrypt_128(ciphertext: &[u8], key: &[u8], iv: &[u8; 16]) -> Result<Vec<u8>> {
+    let expanded_key = aes128::expand_key(key)?;
 
     let mut plaintext = vec![0u8; 0];
 
     // for each block...
     for idx in (0..ciphertext.len()).step_by(16) {
         // decrypt the block...
-        let block = decrypt_block_128(&ciphertext[idx..idx + 16], &expanded_key)?;
+        let block = aes128::decrypt_block(&ciphertext[idx..idx + 16], &expanded_key)?;
 
         // XOR with previous block...
         plaintext.extend(if idx == 0 {
@@ -89,7 +89,7 @@ pub fn decrypt_cbc_128(ciphertext: &[u8], key: &[u8], iv: &[u8; 16]) -> Result<V
     }
 
     // and remove the padding
-    plaintext = validate_and_remove_pkcs7_padding(&plaintext)?;
+    plaintext = validate_and_remove_padding(&plaintext)?;
 
     Ok(plaintext)
 }
@@ -104,9 +104,9 @@ pub mod cbc_tests {
     fn test_cbc_128_encryption() {
         let plaintext = b"Hello World!";
 
-        let ciphertext = encrypt_cbc_128_zero_iv(plaintext, &KNOWN_KEY).unwrap();
+        let ciphertext = encrypt_128_zero_iv(plaintext, &KNOWN_KEY).unwrap();
 
-        let decrypted = decrypt_cbc_128_zero_iv(&ciphertext, &KNOWN_KEY).unwrap();
+        let decrypted = decrypt_128_zero_iv(&ciphertext, &KNOWN_KEY).unwrap();
 
         assert_eq!(
             String::from_utf8(plaintext.to_vec()),
@@ -127,7 +127,7 @@ pub mod cbc_tests {
             "14cfb228a710de4171e396e7b6cf859e"
         );
 
-        let ciphertext = encrypt_cbc_128(&plaintext_expected, &key, &iv).unwrap();
+        let ciphertext = encrypt_128(&plaintext_expected, &key, &iv).unwrap();
         expect_eq(
             ciphertext_expected.len(),
             ciphertext.len(),
@@ -147,7 +147,7 @@ pub mod cbc_tests {
             }
         }
 
-        let plaintext = decrypt_cbc_128(&ciphertext, &key, &iv).unwrap();
+        let plaintext = decrypt_128(&ciphertext, &key, &iv).unwrap();
         expect_eq(&plaintext_expected[..], &plaintext, "decrypting").unwrap();
     }
 }
