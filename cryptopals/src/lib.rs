@@ -3,3 +3,4 @@ pub mod base64;
 pub mod challenges;
 pub mod common;
 pub mod set3;
+pub mod mt19937;

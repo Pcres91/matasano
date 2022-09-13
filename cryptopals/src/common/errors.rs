@@ -22,9 +22,11 @@ pub enum CryptoError {
     Utf8Error(#[from] std::str::Utf8Error),
     #[error("Invalid Data: {0}")]
     InvalidDataError(String),
+    #[error("MS RNG generator must be seeded before getting a number")]
+    MersenneTwisterNotSeededError,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum ExpectationFailure {
     #[error("Expected\n{expected}\nactual\n{actual}\n{message}")]
     ExpectEqualFailure {
@@ -38,7 +40,7 @@ pub enum ExpectationFailure {
     ExpectFalseFailure { message: String },
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum AesError {
     #[error("the key for ECB 128 encryption must be 16 bytes in length")]
     KeyLengthError,
@@ -68,7 +70,7 @@ pub enum AesError {
     ExpectationFailure(#[from] ExpectationFailure),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum UserStorageError {
     #[error("Invalid email format")]
     InvalidEmailFormat,

@@ -1,3 +1,7 @@
+use crate::{
+    aes::pkcs7::{is_padding_valid_for, validate_and_remove_padding},
+    mt19937::*,
+};
 #[allow(unused_imports)]
 use crate::{
     aes::{
@@ -20,7 +24,8 @@ use std::io::{prelude::*, BufReader};
 
 pub fn set3() {
     // print_challenge_result(17, &challenge17);
-    print_challenge_result(18, &challenge18);
+    // print_challenge_result(18, &challenge18);
+    print_challenge_result(21, &challenge21);
 }
 
 /// CBC padding oracle best explained here https://research.nccgroup.com/2021/02/17/cryptopals-exploiting-cbc-padding-oracles/
@@ -64,19 +69,10 @@ pub fn challenge17() -> Result<()> {
     };
 
     let decryptor = |ciphertext_in: &[u8], iv_in: &[u8; 16]| -> (bool, Vec<u8>) {
-        let tmp = cbc::decrypt_128(&ciphertext_in, &oracle.key, iv_in);
-        match tmp {
-            Ok(x) => {
-                println!("success");
-                (true, x)
-            }
-            Err(e) => match e {
-                AesError::InvalidPkcs7Padding(_) => {
-                    // println!("padding error");
-                    (false, vec![])
-                }
-                _ => panic!(),
-            },
+        let tmp = cbc::decrypt_128(&ciphertext_in, &oracle.key, iv_in, true).unwrap();
+        match is_padding_valid_for(&tmp, 16).unwrap() {
+            true => (true, validate_and_remove_padding(&tmp).unwrap()),
+            false => (false, tmp),
         }
     };
 
@@ -163,6 +159,14 @@ pub fn challenge18() -> Result<()> {
         "Own message CTR cipher",
     )?;
 
+    Ok(())
+}
+
+/// implement MS19937 Mersenne Twister
+fn challenge21() -> Result<()> {
+    let mut gen_64 = Mt19937_64::new();
+    // expect_eq(14514284786278117030, gen_64.extract_number()?, "")?;
+    println!("{}", gen_64.extract_number()?);
     Ok(())
 }
 

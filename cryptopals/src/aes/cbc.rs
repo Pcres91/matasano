@@ -22,11 +22,21 @@ impl Cipher for CbcCipher {
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
         match self.iv {
-            Some(x) => decrypt_128(ciphertext, &self.key, &x),
-            None => decrypt_128_zero_iv(ciphertext, &self.key),
+            Some(x) => decrypt_128(ciphertext, &self.key, &x, false),
+            None => decrypt_128_zero_iv(ciphertext, &self.key, false),
         }
     }
 }
+
+// impl CbcCipher {
+//     /// don't strip padding off the message
+//     fn decrypt_keep_padding(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
+//         match self.iv {
+//             Some(x) => decrypt_128(ciphertext, &self.key, &x, true),
+//             None => decrypt_128_zero_iv(ciphertext, &self.key, true),
+//         }
+//     }
+// }
 
 pub fn encrypt_128_zero_iv(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     let iv = vec![0u8; 16];
@@ -65,12 +75,17 @@ pub fn encrypt_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     Ok(ciphertext)
 }
 
-pub fn decrypt_128_zero_iv(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt_128_zero_iv(ciphertext: &[u8], key: &[u8], keep_padding: bool) -> Result<Vec<u8>> {
     let iv = [0u8; 16];
-    decrypt_128(ciphertext, key, &iv)
+    decrypt_128(ciphertext, key, &iv, keep_padding)
 }
 
-pub fn decrypt_128(ciphertext: &[u8], key: &[u8], iv: &[u8; 16]) -> Result<Vec<u8>> {
+pub fn decrypt_128(
+    ciphertext: &[u8],
+    key: &[u8],
+    iv: &[u8; 16],
+    keep_padding: bool,
+) -> Result<Vec<u8>> {
     let expanded_key = aes128::expand_key(key)?;
 
     let mut plaintext = vec![0u8; 0];
@@ -89,7 +104,9 @@ pub fn decrypt_128(ciphertext: &[u8], key: &[u8], iv: &[u8; 16]) -> Result<Vec<u
     }
 
     // and remove the padding
-    plaintext = validate_and_remove_padding(&plaintext)?;
+    if !keep_padding {
+        plaintext = validate_and_remove_padding(&plaintext)?;
+    }
 
     Ok(plaintext)
 }
@@ -106,7 +123,7 @@ pub mod cbc_tests {
 
         let ciphertext = encrypt_128_zero_iv(plaintext, &KNOWN_KEY).unwrap();
 
-        let decrypted = decrypt_128_zero_iv(&ciphertext, &KNOWN_KEY).unwrap();
+        let decrypted = decrypt_128_zero_iv(&ciphertext, &KNOWN_KEY, false).unwrap();
 
         assert_eq!(
             String::from_utf8(plaintext.to_vec()),
@@ -147,7 +164,7 @@ pub mod cbc_tests {
             }
         }
 
-        let plaintext = decrypt_128(&ciphertext, &key, &iv).unwrap();
+        let plaintext = decrypt_128(&ciphertext, &key, &iv, false).unwrap();
         expect_eq(&plaintext_expected[..], &plaintext, "decrypting").unwrap();
     }
 }

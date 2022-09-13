@@ -582,7 +582,7 @@ pub fn challenge16() -> Result<()> {
             cbc::encrypt_128_zero_iv(&baconised_text, &self.key)
         }
         fn decrypt(&self, ciphertext: &[u8]) -> AesResult<Vec<u8>> {
-            cbc::decrypt_128_zero_iv(ciphertext, &self.key)
+            cbc::decrypt_128_zero_iv(ciphertext, &self.key, false)
         }
     }
 
