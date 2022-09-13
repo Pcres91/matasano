@@ -166,7 +166,7 @@ pub fn challenge18() -> Result<()> {
 fn challenge21() -> Result<()> {
     let mut gen_64 = Mt19937_64::new();
     // expect_eq(14514284786278117030, gen_64.extract_number()?, "")?;
-    println!("{}", gen_64.extract_number()?);
+    println!("{}", gen_64.next());
     Ok(())
 }
 

@@ -1,22 +1,13 @@
-use crate::common::errors::{CryptoError, Result};
-
 const W: u64 = 64;
 const N: usize = 312;
 const M: usize = 156;
 // const R: u64 = 31;
 const A: u64 = 0xb5026f5aa96619e9;
-const U: u64 = 29;
-const D: u64 = 0x5555555555555555;
-const S: u64 = 17;
-const B: u64 = 0x71d67fffeda60000;
-const T: u64 = 37;
-const C: u64 = 0xfff7eee000000000;
-const L: u64 = 43;
 const F: u64 = 6364136223846793005;
 // const LOWER_MASK: u64 = (1 << R) - 1;
 // const UPPER_MASK: u64 = (!LOWER_MASK as u64) as u64;
-const LOWER_MASK: u64 = 0xFFFFFFFF80000000;
-const UPPER_MASK: u64 = 0x7FFFFFFF;
+const UPPER_MASK: u64 = 0xFFFFFFFF80000000u64;
+const LOWER_MASK: u64 = 0x7FFFFFFFu64;
 
 pub struct Mt19937_64 {
     mt: [u64; N],
@@ -29,7 +20,7 @@ impl Mt19937_64 {
             mt: [0u64; N],
             index: N as usize + 1,
         };
-        new.seed_mt(5489);
+        new.seed(5489);
         new
     }
 
@@ -38,11 +29,11 @@ impl Mt19937_64 {
             mt: [0u64; N],
             index: N as usize + 1,
         };
-        new.seed_mt(seed);
+        new.seed(seed);
         new
     }
 
-    pub fn seed_mt(self: &mut Self, seed: u64) {
+    pub fn seed(self: &mut Self, seed: u64) {
         self.index = N;
         self.mt[0] = seed as u64;
 
@@ -51,39 +42,76 @@ impl Mt19937_64 {
         })
     }
 
-    fn twist(self: &mut Self) {
-        (0..N - 1).for_each(|i| {
-            if i < 5 {print!("{i}: ")};
-            let x = (self.mt[i] & UPPER_MASK) | ((self.mt[(i + 1) % N]) & LOWER_MASK);
-            if i < 5 {print!("x: {x} ")};
-            let x_a = if x % 2 == 0 { x >> 1 } else { (x >> 1) ^ A };
-            self.mt[i] = self.mt[(i + M) % N] ^ x_a;
-            if i < 5 {print!("mt[i]: {}\n", self.mt[i])};
-        });
-        self.index = 0;
-    }
+    // fn twist(self: &mut Self) {
+    //     (0..N - 1).for_each(|i| {
+    //         if i < 5 {print!("{i}: ")};
+    //         let x = (self.mt[i] & UPPER_MASK) | ((self.mt[(i + 1) % N]) & LOWER_MASK);
+    //         if i < 5 {print!("x: {x} ")};
+    //         let x_a = if x % 2 == 0 { x >> 1 } else { (x >> 1) ^ A };
+    //         self.mt[i] = self.mt[(i + M) % N] ^ x_a;
+    //         if i < 5 {print!("mt[i]: {}\n", self.mt[i])};
+    //     });
+    //     self.index = 0;
+    // }
 
-    pub fn extract_number(self: &mut Self) -> Result<u64> {
+    // fn twist_orig() {
+
+    // }
+
+    pub fn next(self: &mut Self) -> u64 {
+        // let i: usize = 0;
+        let mut x: u64 = 0;
+
         if self.index >= N {
             if self.index > N {
-                return Err(CryptoError::MersenneTwisterNotSeededError);
+                self.seed(5489);
             }
-            self.twist()
+
+            // mt[0..155]
+            (0..(N - M)).for_each(|i| {
+                x = (self.mt[i] & UPPER_MASK) | (self.mt[i + 1] & LOWER_MASK);
+                let mag01 = if x % 2 == 0 { 0 } else { A };
+
+                self.mt[i] = self.mt[i + M] ^ (x >> 1) ^ mag01;
+                self.index = i;
+            });
+
+            // mt[156..311]
+            (self.index + 1..N - 1).for_each(|i| {
+                x = (self.mt[i] & UPPER_MASK) | (self.mt[i + 1] & LOWER_MASK);
+                let mag01 = if x % 2 == 0 { 0 } else { A };
+                self.mt[i] =
+                    self.mt[(i as i32 + (M as i32 - N as i32)) as usize] ^ (x >> 1) ^ mag01;
+            });
+            x = (self.mt[N - 1] & UPPER_MASK) | (self.mt[0] & LOWER_MASK);
+            let mag01 = if x % 2 == 0 { 0 } else { A };
+            self.mt[N - 1] = self.mt[M - 1] ^ (x >> 1) ^ mag01;
+            self.index = 0;
         }
-        let mut y: u64 = self.mt[self.index];
-        y ^= (y >> U) & D;
-        y ^= (y << S) & B;
-        y ^= (y << T) & C;
-        y ^= y >> L;
+        x = self.mt[self.index];
         self.index += 1;
-        Ok(y as u64)
+
+        x ^= (x >> 29) & 0x5555555555555555u64;
+        x ^= (x << 17) & 0x71D67FFFEDA60000u64;
+        x ^= (x << 37) & 0xFFF7EEE000000000u64;
+        x ^= x >> 43;
+
+        x
     }
 }
 
 #[cfg(test)]
 mod test_mersenne_twister {
+    use std::{
+        fs::File,
+        io::{BufRead, BufReader},
+    };
+
     use super::*;
-    use crate::common::expectations::*;
+    use crate::{
+        base64,
+        common::{expectations::*, util::until_err},
+    };
 
     #[test]
     fn test_seed() {
@@ -407,65 +435,14 @@ mod test_mersenne_twister {
     fn test_against_cpp_std_out() {
         let mut gen_64 = Mt19937_64::new();
 
-        expect_eq(
-            14514284786278117030,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            4620546740167642908,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            13109570281517897720,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            17462938647148434322,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            355488278567739596,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            7469126240319926998,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            4635995468481642529,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            418970542659199878,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            9604170989252516556,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
-        expect_eq(
-            6358044926049913402,
-            gen_64.extract_number().unwrap(),
-            "mt_64 output",
-        )
-        .unwrap();
+        let reader = BufReader::new(File::open("21_test.txt").unwrap());
+
+        reader
+            .lines()
+            .map(|line| line.unwrap().parse::<u64>().unwrap())
+            .enumerate()
+            .for_each(|(i, expected)| {
+                expect_eq(expected, gen_64.next(), &format!("testing {i}th value")).unwrap()
+            });
     }
 }
