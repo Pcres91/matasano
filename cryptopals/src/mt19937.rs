@@ -118,7 +118,6 @@ impl Mt19937_64 {
     }
 
     pub fn next(self: &mut Self) -> u64 {
-        // let i: usize = 0;
         let mut x: u64 = 0;
 
         if self.index >= N {
@@ -186,7 +185,7 @@ mod test_mersenne_twister {
 
     #[test]
     fn test_64bit_seed() {
-        let mut gen_64 = Mt19937_64::new();
+        let gen_64 = Mt19937_64::new();
 
         expect_eq(5489, gen_64.mt[0], "").unwrap();
         expect_eq(13057201162865595358, gen_64.mt[1], "").unwrap();
