@@ -4,10 +4,85 @@ const M: usize = 156;
 // const R: u64 = 31;
 const A: u64 = 0xb5026f5aa96619e9;
 const F: u64 = 6364136223846793005;
-// const LOWER_MASK: u64 = (1 << R) - 1;
-// const UPPER_MASK: u64 = (!LOWER_MASK as u64) as u64;
 const UPPER_MASK: u64 = 0xFFFFFFFF80000000u64;
 const LOWER_MASK: u64 = 0x7FFFFFFFu64;
+
+const N_32: usize = 624;
+const M_32: usize = 397;
+const MATRIX_A_32: u32 = 0x9908b0df;
+const UPPER_MASK_32: u32 = 0x80000000;
+const LOWER_MASK_32: u32 = 0x7fffffff;
+
+pub struct Mt19937 {
+    mt: [u32; N_32],
+    index: usize,
+}
+
+impl Mt19937 {
+    pub fn new() -> Self {
+        let mut new = Mt19937 {
+            mt: [0u32; N_32],
+            index: N as usize + 1,
+        };
+        new.seed(5489);
+        new
+    }
+
+    pub fn seeded(seed: u32) -> Self {
+        let mut new = Mt19937 {
+            mt: [0u32; N_32],
+            index: N as usize + 1,
+        };
+        new.seed(seed);
+        new
+    }
+
+    pub fn seed(self: &mut Self, seed: u32) {
+        self.mt[0] = seed & 0xffffffffu32;
+
+        (1..N_32).for_each(|i| {
+            self.mt[i] =
+                1812433253u32.wrapping_mul(self.mt[i - 1] ^ (self.mt[i - 1] >> 30)) + i as u32;
+            self.mt[i] &= 0xffffffffu32;
+        });
+        self.index = N_32
+    }
+
+    pub fn next(self: &mut Self) -> u32 {
+        let mut y: u32 = 0;
+
+        if self.index >= N_32 {
+            if self.index > N_32 {
+                self.seed(5489);
+            }
+
+            (0..N_32 - M_32).for_each(|i| {
+                y = (self.mt[i] & UPPER_MASK_32) | (self.mt[i + 1] & LOWER_MASK_32);
+                let mag01 = if y % 2 == 0 { 0 } else { MATRIX_A_32 };
+                self.mt[i] = self.mt[i + M_32] ^ (y >> 1) ^ mag01;
+                self.index = i;
+            });
+
+            (self.index + 1..N_32 - 1).for_each(|i| {
+                y = (self.mt[i] & UPPER_MASK_32) | (self.mt[i + 1] & LOWER_MASK_32);
+                let mag01 = if y % 2 == 0 { 0 } else { MATRIX_A_32 };
+                self.mt[i] = self.mt[i + M_32 - N_32] ^ (y >> 1) ^ mag01;
+            });
+            y = (self.mt[N_32 - 1] & UPPER_MASK_32) | (self.mt[0] & LOWER_MASK_32);
+            let mag01 = if y % 2 == 0 { 0 } else { MATRIX_A_32 };
+            self.mt[N_32 - 1] = self.mt[M_32 - 1] ^ (y >> 1) ^ mag01;
+            self.index = 0;
+        }
+        y = self.mt[self.index];
+        self.index += 1;
+
+        y ^= y >> 11;
+        y ^= (y << 7) & 0x9d2c5680u32;
+        y ^= (y << 15) & 0xefc60000u32;
+        y ^= y >> 18;
+        y
+    }
+}
 
 pub struct Mt19937_64 {
     mt: [u64; N],
@@ -42,22 +117,6 @@ impl Mt19937_64 {
         })
     }
 
-    // fn twist(self: &mut Self) {
-    //     (0..N - 1).for_each(|i| {
-    //         if i < 5 {print!("{i}: ")};
-    //         let x = (self.mt[i] & UPPER_MASK) | ((self.mt[(i + 1) % N]) & LOWER_MASK);
-    //         if i < 5 {print!("x: {x} ")};
-    //         let x_a = if x % 2 == 0 { x >> 1 } else { (x >> 1) ^ A };
-    //         self.mt[i] = self.mt[(i + M) % N] ^ x_a;
-    //         if i < 5 {print!("mt[i]: {}\n", self.mt[i])};
-    //     });
-    //     self.index = 0;
-    // }
-
-    // fn twist_orig() {
-
-    // }
-
     pub fn next(self: &mut Self) -> u64 {
         // let i: usize = 0;
         let mut x: u64 = 0;
@@ -80,9 +139,9 @@ impl Mt19937_64 {
             (self.index + 1..N - 1).for_each(|i| {
                 x = (self.mt[i] & UPPER_MASK) | (self.mt[i + 1] & LOWER_MASK);
                 let mag01 = if x % 2 == 0 { 0 } else { A };
-                self.mt[i] =
-                    self.mt[(i as i32 + (M as i32 - N as i32)) as usize] ^ (x >> 1) ^ mag01;
+                self.mt[i] = self.mt[i + M - N] ^ (x >> 1) ^ mag01;
             });
+
             x = (self.mt[N - 1] & UPPER_MASK) | (self.mt[0] & LOWER_MASK);
             let mag01 = if x % 2 == 0 { 0 } else { A };
             self.mt[N - 1] = self.mt[M - 1] ^ (x >> 1) ^ mag01;
@@ -108,13 +167,25 @@ mod test_mersenne_twister {
     };
 
     use super::*;
-    use crate::{
-        base64,
-        common::{expectations::*, util::until_err},
-    };
+    use crate::common::expectations::*;
 
     #[test]
-    fn test_seed() {
+    fn test_against_cpp_std_out() {
+        let mut gen = Mt19937::new();
+
+        let reader = BufReader::new(File::open("21_32bit_test.txt").unwrap());
+
+        reader
+            .lines()
+            .map(|line| line.unwrap().parse::<u32>().unwrap())
+            .enumerate()
+            .for_each(|(i, expected)| {
+                expect_eq(expected, gen.next(), &format!("testing {i}th value")).unwrap()
+            });
+    }
+
+    #[test]
+    fn test_64bit_seed() {
         let mut gen_64 = Mt19937_64::new();
 
         expect_eq(5489, gen_64.mt[0], "").unwrap();
@@ -432,7 +503,7 @@ mod test_mersenne_twister {
     }
 
     #[test]
-    fn test_against_cpp_std_out() {
+    fn test_64bit_against_cpp_std_out() {
         let mut gen_64 = Mt19937_64::new();
 
         let reader = BufReader::new(File::open("21_test.txt").unwrap());

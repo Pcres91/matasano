@@ -164,11 +164,24 @@ pub fn challenge18() -> Result<()> {
 
 /// implement MS19937 Mersenne Twister
 fn challenge21() -> Result<()> {
+    let mut gen32 = Mt19937::new();
+
+    let reader32 = BufReader::new(File::open("21_32bit_test.txt").unwrap());
+
+    let mut err = Ok(());
+
+    reader32
+        .lines()
+        .map(|line| line.unwrap().parse::<u32>())
+        .scan(&mut err, until_err)
+        .enumerate()
+        .try_for_each(|(i, expected)| {
+            expect_eq(expected, gen32.next(), &format!("testing {i}th value"))
+        })?;
+
     let mut gen_64 = Mt19937_64::new();
 
     let reader = BufReader::new(File::open("21_test.txt")?);
-
-    let mut err = Ok(());
 
     reader
         .lines()
