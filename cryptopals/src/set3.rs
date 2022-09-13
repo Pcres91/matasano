@@ -23,8 +23,8 @@ use std::fs::File;
 use std::io::{prelude::*, BufReader};
 
 pub fn set3() {
-    // print_challenge_result(17, &challenge17);
-    // print_challenge_result(18, &challenge18);
+    print_challenge_result(17, &challenge17);
+    print_challenge_result(18, &challenge18);
     print_challenge_result(21, &challenge21);
 }
 
@@ -165,8 +165,20 @@ pub fn challenge18() -> Result<()> {
 /// implement MS19937 Mersenne Twister
 fn challenge21() -> Result<()> {
     let mut gen_64 = Mt19937_64::new();
-    // expect_eq(14514284786278117030, gen_64.extract_number()?, "")?;
-    println!("{}", gen_64.next());
+
+    let reader = BufReader::new(File::open("21_test.txt")?);
+
+    let mut err = Ok(());
+
+    reader
+        .lines()
+        .map(|line| line.unwrap().parse::<u64>())
+        .scan(&mut err, until_err)
+        .enumerate()
+        .try_for_each(|(i, expected)| {
+            expect_eq(expected, gen_64.next(), &format!("testing {i}th value"))
+        })?;
+
     Ok(())
 }
 
@@ -180,5 +192,9 @@ mod set3_tests {
     #[test]
     fn test_challenge18() {
         challenge18().unwrap();
+    }
+    #[test]
+    fn test_challenge21() {
+        challenge21().unwrap();
     }
 }
