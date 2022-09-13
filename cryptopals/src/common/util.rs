@@ -10,7 +10,6 @@ use std::io::Cursor;
 extern crate hex;
 extern crate num_traits;
 
-
 pub fn until_err<T, E>(
     err: &mut &mut std::result::Result<(), E>,
     item: std::result::Result<T, E>,
@@ -198,7 +197,7 @@ pub fn find_key_size(
         .0)
 }
 
-/// TODO: what is this? If necessary surely this can be simplified
+/// TODO: use step_by
 fn get_slice(data: &[u8], start: usize, step: usize) -> Vec<u8> {
     let mut slice = vec![];
     let mut idx = start;
