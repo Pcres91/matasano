@@ -159,7 +159,7 @@ pub fn challenge6() -> Result<()> {
     let key_size = find_key_size(&cipher, (2, 40), 20)?;
 
     // get all the first bytes of each block together, second bytes of each block together, etc
-    let sliced_data = slice_by_byte(&cipher, key_size);
+    let sliced_data = get_data_per_byte_of_key(&cipher, key_size);
 
     // find the best character key for each slice
     let key: Vec<u8> = sliced_data

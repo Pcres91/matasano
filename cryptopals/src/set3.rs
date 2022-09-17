@@ -12,26 +12,28 @@ use crate::{
         bit_ops::xor_with_single_byte,
         errors::{AesError, Result},
         expectations::*,
-        util::{until_err, Wrap},
+        util::{get_slice, until_err, Wrap},
     },
 };
 use crate::{
     aes::pkcs7::{is_padding_valid_for, validate_and_remove_padding},
+    common::{bit_ops::xor_bytes, util::find_best_character_key},
     mt19937::*,
 };
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
-use std::convert::TryInto;
-use std::fs::File;
 use std::io::{prelude::*, BufReader};
+use std::{convert::TryInto, slice::Iter};
+use std::{fs::File, iter::Peekable};
 
 pub fn set3() {
     print_challenge_result(17, &challenge17);
     print_challenge_result(18, &challenge18);
+    print_challenge_result(19, &challenge19);
     print_challenge_result(21, &challenge21);
 }
 
-/// CBC padding oracle best explained here https://research.nccgroup.com/2021/02/17/cryptopals-exploiting-cbc-padding-oracles/
+/// CBC padding oracle attack best explained here https://research.nccgroup.com/2021/02/17/cryptopals-exploiting-cbc-padding-oracles/
 pub fn challenge17() -> Result<()> {
     let mut err = Ok(());
     let reader = BufReader::new(File::open("17.txt")?);
@@ -208,6 +210,77 @@ pub fn challenge18() -> Result<()> {
     Ok(())
 }
 
+pub fn challenge19() -> Result<()> {
+    let mut err = Ok(());
+    let reader = BufReader::new(File::open("19.txt")?);
+    let lines = reader
+        .lines()
+        .map(|line| base64::decode(line?.as_bytes()))
+        .scan(&mut err, until_err)
+        .collect::<Vec<Vec<u8>>>();
+    err?;
+
+    let cipher = ctr::CtrCipher {
+        key: generate_rnd_key(),
+        nonce: 0,
+    };
+
+    let encrypted_lines = lines
+        .par_iter()
+        .map(|line| cipher.encrypt(&line).unwrap())
+        .collect::<Vec<Vec<u8>>>();
+    expect_eq(40, encrypted_lines.len(), "no encryptions failed")?;
+
+    // using a similar attack to ch6, we know that for each ciphertext, byte 0 for each ciphertext has been
+    // encrypted against the same byte of the keystream. This allows us to score against a single byte for all, to find a
+    // most reasonable byte.
+    let mut iters = encrypted_lines
+        .iter()
+        .map(|line| line.iter().peekable())
+        .collect::<Vec<Peekable<Iter<u8>>>>();
+
+    let data_available = |iters: &mut Vec<Peekable<Iter<u8>>>| -> bool {
+        iters.iter_mut().any(|it| it.peek() != None)
+    };
+
+    // take 1st byte of each vec and bunch, 2nd byte and bunch, etc
+    let mut sliced_data: Vec<Vec<u8>> = Vec::new();
+    while data_available(&mut iters) {
+        sliced_data.push(
+            iters
+                .iter_mut()
+                .filter_map(|it| it.next())
+                .map(|c| *c)
+                .collect(),
+        );
+    }
+
+    let keystream = sliced_data
+        .iter()
+        // .filter(|v| v.len() >= reasonable_num_to_check_with)
+        .map(|v| find_best_character_key(&v))
+        .collect::<Vec<u8>>();
+
+    // https://www.poetryfoundation.org/poems/43289/easter-1916
+    // Easter, by William Yeats
+    let plaintext_lines = encrypted_lines
+        .iter()
+        .map(|v| {
+            xor_bytes(v, &keystream[..v.len()]).unwrap()
+            // these will actually never fail because we'll always try find a char key
+            // println!("{}", try_display(&res));
+        })
+        .collect::<Vec<Vec<u8>>>();
+
+    expect_eq(
+        "coming with vivid faces".as_bytes(),
+        &plaintext_lines[1],
+        "The second line is short enough that statistically we should get a perfect output",
+    )?;
+
+    Ok(())
+}
+
 /// implement MS19937 Mersenne Twister
 fn challenge21() -> Result<()> {
     let mut gen32 = Mt19937::new();
@@ -251,6 +324,10 @@ mod set3_tests {
     #[test]
     fn test_challenge18() {
         challenge18().unwrap();
+    }
+    #[test]
+    fn test_challenge19() {
+        challenge19().unwrap();
     }
     #[test]
     fn test_challenge21() {

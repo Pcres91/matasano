@@ -34,6 +34,17 @@ impl fmt::Display for Wrap {
     }
 }
 
+/// for data that might not be 100% convertable to utf8,
+/// display a hash where the data failed to convert
+pub fn try_display(text: &[u8]) -> String {
+    text.iter()
+        .map(|c| match String::from_utf8([*c].to_vec()) {
+            Ok(c) => c,
+            Err(_) => String::from('#'),
+        })
+        .collect()
+}
+
 /// converts a string of hex into bytes
 /// ie, "0123afbe" -> vec![0x01, 0x23, 0xaf, 0xbe]
 pub fn hex_string_to_vec_u8(bytes: &[u8]) -> Result<Vec<u8>> {
@@ -197,20 +208,32 @@ pub fn find_key_size(
         .0)
 }
 
-/// TODO: use step_by
-fn get_slice(data: &[u8], start: usize, step: usize) -> Vec<u8> {
-    let mut slice = vec![];
-    let mut idx = start;
-    while idx < data.len() {
-        slice.push(data[idx]);
-        idx += step;
-    }
-
-    slice
+/// Think numpy - getting a single byte from a given dimension
+///
+/// Examples:
+///
+/// ```
+/// let v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];\n
+/// let r = get_slice(&v, 0, 2);
+/// expect_eq(vec![0, 2, 4, 6, 8, 10, 12], r, "sliced correctly").unwrap();
+/// let r = get_slice(&v, 1, 3);
+/// expect_eq(vec![1, 4, 7, 10], r, "sliced correctly").unwrap();
+/// let r = get_slice(&v, 2, 4);
+/// expect_eq(vec![2, 6, 10], r, "sliced correctly").unwrap();
+/// ```
+pub fn get_slice(data: &[u8], start_idx: usize, step_by: usize) -> Vec<u8> {
+    data[start_idx..]
+        .par_iter()
+        .step_by(step_by)
+        .map(|i| *i)
+        .collect()
 }
 
-pub fn slice_by_byte(data: &[u8], key_size: usize) -> Vec<Vec<u8>> {
+/// using get_slice, return per-idx the bytes that have all been encrypted with that
+/// key's byte
+pub fn get_data_per_byte_of_key(data: &[u8], key_size: usize) -> Vec<Vec<u8>> {
     (0..key_size)
+        .into_par_iter()
         .map(|key| get_slice(data, key, key_size))
         .collect()
 }
@@ -282,7 +305,7 @@ pub const SMART_ASCII: [u8; 255] = [
 mod common_util_tests {
     use crate::common::expectations::expect_eq;
 
-    use super::hex_string_to_vec_u8;
+    use super::{get_slice, hex_string_to_vec_u8};
 
     #[test]
     fn test_hex_string_to_u8() {
@@ -291,5 +314,16 @@ mod common_util_tests {
         let res = hex_string_to_vec_u8(b"59454c4c4f57205355424d4152494e45").unwrap();
 
         expect_eq(expected.to_vec(), res, "hex_string_to_u8").unwrap();
+    }
+
+    #[test]
+    fn test_get_slice_output() {
+        let v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let r = get_slice(&v, 0, 2);
+        expect_eq(vec![0, 2, 4, 6, 8, 10, 12], r, "sliced correctly").unwrap();
+        let r = get_slice(&v, 1, 3);
+        expect_eq(vec![1, 4, 7, 10], r, "sliced correctly").unwrap();
+        let r = get_slice(&v, 2, 4);
+        expect_eq(vec![2, 6, 10], r, "sliced correctly").unwrap();
     }
 }
