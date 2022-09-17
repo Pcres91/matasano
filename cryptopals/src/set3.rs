@@ -75,16 +75,18 @@ pub fn challenge17() -> Result<()> {
 
     let (ciphertext, _) = encryptor()?;
 
-    let create_forced_iv = |iv: &[u8; aes::BLOCK_SIZE],
-                            guessed_byte: u8,
-                            padding_len: usize,
-                            found_plaintext: &[u8]|
+    let create_forcing_iv = |iv: &[u8; aes::BLOCK_SIZE],
+                             candidate: u8,
+                             padding_len: usize,
+                             found_plaintext: &[u8]|
      -> Vec<u8> {
-        let index_of_forced_char = iv.len() - padding_len;
+        let candidate_idx = iv.len() - padding_len;
 
-        let mut forced_character = iv[index_of_forced_char] ^ guessed_byte ^ padding_len as u8;
+        // decryption is XOR then decrypt_block. Perform the XOR now, so that our decrypt will
+        // return the padding_len when the candidate == plaintext byte
+        let mut forced_character = iv[candidate_idx] ^ candidate ^ padding_len as u8;
 
-        let mut output = [&iv[..index_of_forced_char], &[forced_character][..]].concat();
+        let mut output = [&iv[..candidate_idx], &[forced_character][..]].concat();
 
         for k in aes::BLOCK_SIZE - padding_len + 1..aes::BLOCK_SIZE {
             forced_character = iv[k] ^ found_plaintext[k] ^ padding_len as u8;
@@ -96,6 +98,10 @@ pub fn challenge17() -> Result<()> {
     let candidate_is_the_plaintext_byte =
         |candidate_idx: usize, ct_block: &[u8], padding_iv: &mut [u8]| -> bool {
             if decryptor(ct_block.try_into().unwrap(), padding_iv) {
+                // edge case: 2 possible cases when trying to find the final byte in the block:
+                // 1) correct case [...,  0xN, 0x1],
+                // 2) false positive [..., 0x2, 0x2]. In this case, our candidate did not return the padding
+                //    we expect, and the whole thing will be off for the next candidate.
                 if candidate_idx == aes::BLOCK_SIZE - 1 {
                     padding_iv[candidate_idx - 1] ^= 1;
                     if !decryptor(ct_block, &padding_iv) {
@@ -108,11 +114,15 @@ pub fn challenge17() -> Result<()> {
             }
         };
 
-    // for each block, decrypt using the padded oracle attack
     let single_block_attack =
-        |ct_block: &[u8; aes::BLOCK_SIZE], previous_block: &[u8; aes::BLOCK_SIZE]| -> Vec<u8> {
+        |ct_block: &[u8; aes::BLOCK_SIZE], ct_prev_block: &[u8; aes::BLOCK_SIZE]| -> Vec<u8> {
             let mut decrypted = vec![0u8; 16];
 
+            // CTR encryption: ENCRYPT -> XOR. decryption: DECRYPT -> XOR.
+            // for the final byte in the block len, find a candidate byte that returns valid padding when run through the oracle.
+            // This means that we have constructed a final IV byte that is identical to the plaintext byte!
+            // Once done, the knowledge of that byte's real value allows us to construct a padding
+            // that gets us the previous byte as the final padding value, etc etc
             (1..=aes::BLOCK_SIZE).for_each(|pad_val| {
                 let candidate_idx = aes::BLOCK_SIZE - pad_val as usize;
 
@@ -121,7 +131,7 @@ pub fn challenge17() -> Result<()> {
                     .map(|candidate| {
                         (
                             candidate,
-                            create_forced_iv(&previous_block, candidate, pad_val, &decrypted),
+                            create_forcing_iv(&ct_prev_block, candidate, pad_val, &decrypted),
                         )
                     })
                     .fold(
