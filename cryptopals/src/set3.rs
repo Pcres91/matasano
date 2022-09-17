@@ -71,13 +71,10 @@ pub fn challenge17() -> Result<()> {
         Ok((ciphertext, oracle.iv.clone()))
     };
 
-    let decryptor = |ciphertext_in: &[u8], iv_in: &[u8]| -> (bool, Vec<u8>) {
+    let decryptor = |ciphertext_in: &[u8], iv_in: &[u8]| -> bool {
         let tmp =
             cbc::decrypt_128(&ciphertext_in, &oracle.key, iv_in.try_into().unwrap(), true).unwrap();
-        match is_padding_valid_for(&tmp, aes::BLOCK_SIZE).unwrap() {
-            true => (true, validate_and_remove_padding(&tmp).unwrap()),
-            false => (false, tmp),
-        }
+        is_padding_valid_for(&tmp, aes::BLOCK_SIZE).unwrap()
     };
 
     let (ciphertext, _) = encryptor()?;
@@ -102,10 +99,10 @@ pub fn challenge17() -> Result<()> {
 
     let candidate_is_the_plaintext_byte =
         |candidate_idx: usize, ct_block: &[u8], padding_iv: &mut [u8]| -> bool {
-            if decryptor(ct_block.try_into().unwrap(), padding_iv).0 {
+            if decryptor(ct_block.try_into().unwrap(), padding_iv) {
                 if candidate_idx == aes::BLOCK_SIZE - 1 {
                     padding_iv[candidate_idx - 1] ^= 1;
-                    if !decryptor(ct_block, &padding_iv).0 {
+                    if !decryptor(ct_block, &padding_iv) {
                         return false;
                     }
                 }
@@ -153,6 +150,7 @@ pub fn challenge17() -> Result<()> {
     let ciphertext_blocks = [oracle.iv.to_vec(), ciphertext].concat();
     let mut ct_iter = ciphertext_blocks.chunks_exact(aes::BLOCK_SIZE);
     ct_iter.next();
+
     let mut plaintext: Vec<u8> = ct_iter
         .zip(ciphertext_blocks.chunks_exact(aes::BLOCK_SIZE))
         .flat_map(|(block, prev_block)| {
@@ -163,7 +161,7 @@ pub fn challenge17() -> Result<()> {
     if is_padding_valid_for(&plaintext, aes::BLOCK_SIZE)? {
         plaintext = validate_and_remove_padding(&plaintext)?;
     }
-    println!("{}", Wrap(plaintext.clone()));
+
     expect_eq(
         plaintext_real,
         plaintext,
