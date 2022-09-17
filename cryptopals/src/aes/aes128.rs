@@ -1,4 +1,5 @@
 use crate::{
+    aes,
     aes::util::Result,
     common::{bit_ops::xor_bytes, errors::AesError},
 };
@@ -10,7 +11,7 @@ pub fn encrypt_block(block: &[u8], expanded_key: &[u8; 176]) -> Result<Vec<u8>> 
 
     let mut cipherblock = block.to_vec();
 
-    apply_key(&mut cipherblock, &expanded_key[..16])?;
+    apply_key(&mut cipherblock, &expanded_key[..aes::BLOCK_SIZE])?;
 
     for round in 1..10 {
         mix_and_sub_rows(&mut cipherblock)?;

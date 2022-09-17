@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use crate::{aes::util::Result, common::errors::AesError, common::expectations::expect_eq};
+use crate::{aes, aes::util::Result, common::errors::AesError, common::expectations::expect_eq};
 
 /// returns just the padding bytes for the plaintext
 pub fn get_padding_for(plaintext: &[u8], block_byte_length: usize) -> Result<Vec<u8>> {
@@ -81,11 +81,11 @@ pub fn is_padding_valid_for(data: &[u8], block_length: usize) -> Result<bool> {
 
 pub fn validate_and_remove_padding(data: &[u8]) -> Result<Vec<u8>> {
     // println!("validate {:?}", data);
-    match is_padding_valid_for(&data, 16)? {
+    match is_padding_valid_for(&data, aes::BLOCK_SIZE)? {
         true => (),
         false => {
             return Err(AesError::InvalidPkcs7Padding(
-                data[data.len() - 16..].to_vec(),
+                data[data.len() - aes::BLOCK_SIZE..].to_vec(),
             ))
         }
     }
@@ -101,7 +101,7 @@ mod pkcs7_tests {
 
     #[test]
     fn test_pkcs7_pads_entirely_new_block() {
-        let block_size = 16;
+        let block_size = aes::BLOCK_SIZE;
         let mut block = vec![0u8; block_size];
         let copy = block.clone();
         pad_inplace(&mut block, block_size).unwrap();
@@ -138,42 +138,42 @@ mod pkcs7_tests {
     fn test_padding_validity_returned_when_encrypting_block() {
         let mut data = [vec![0u8; 14], vec![0x2u8; 2]].concat();
         expect_true(
-            is_padding_valid_for(&data, 16).unwrap(),
+            is_padding_valid_for(&data, aes::BLOCK_SIZE).unwrap(),
             "Testing valid padding is validated",
         )
         .unwrap();
 
-        data = [vec![1u8; 16], vec![0xfu8; 16]].concat();
+        data = [vec![1u8; aes::BLOCK_SIZE], vec![0xfu8; aes::BLOCK_SIZE]].concat();
         expect_true(
-            is_padding_valid_for(&data, 16).unwrap(),
+            is_padding_valid_for(&data, aes::BLOCK_SIZE).unwrap(),
             "Testing valid full padding block",
         )
         .unwrap();
 
         data = [vec![1u8; 15], vec![0xffu8; 1]].concat();
         expect_false(
-            is_padding_valid_for(&data, 16).unwrap(),
+            is_padding_valid_for(&data, aes::BLOCK_SIZE).unwrap(),
             "Testing 0xff final block on bad padding",
         )
         .unwrap();
 
         data = [vec![1u8; 14], vec![0x3u8; 2]].concat();
         expect_false(
-            is_padding_valid_for(&data, 16).unwrap(),
+            is_padding_valid_for(&data, aes::BLOCK_SIZE).unwrap(),
             "Testing one too few values is invalid",
         )
         .unwrap();
 
         data = [vec![1u8; 12], vec![0x3u8; 4]].concat();
         expect_true(
-            is_padding_valid_for(&data, 16).unwrap(),
+            is_padding_valid_for(&data, aes::BLOCK_SIZE).unwrap(),
             "Testing one too many values is valid",
         )
         .unwrap();
 
         data = [vec![1u8; 15], vec![0x0u8; 1]].concat();
         expect_false(
-            is_padding_valid_for(&data, 16).unwrap(),
+            is_padding_valid_for(&data, aes::BLOCK_SIZE).unwrap(),
             "Testing last value is 0 returns invalid",
         )
         .unwrap();

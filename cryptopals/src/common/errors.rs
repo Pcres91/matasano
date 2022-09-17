@@ -42,9 +42,9 @@ pub enum ExpectationFailure {
 
 #[derive(Debug, Error, PartialEq)]
 pub enum AesError {
-    #[error("the key for ECB 128 encryption must be 16 bytes in length")]
+    #[error("the key for ECB 128 encryption must be aes::BLOCK_SIZE bytes in length")]
     KeyLengthError,
-    #[error("Cipher Text length must be divisible by 16")]
+    #[error("Cipher Text length must be divisible by aes::BLOCK_SIZE")]
     CipherTextLengthError,
     #[error("The data is not PKCS7-padded")]
     NotPKCS7PaddedError,

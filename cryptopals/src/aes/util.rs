@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 
 use crate::{
+    aes,
     aes::*,
     common::{errors::AesResult, util::until_err},
 };
@@ -10,7 +11,7 @@ use rayon::prelude::*;
 
 pub type Result<T> = AesResult<T>;
 
-pub const KNOWN_KEY: [u8; 16] = [
+pub const KNOWN_KEY: [u8; aes::BLOCK_SIZE] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 ];
 
@@ -19,13 +20,13 @@ pub trait Cipher {
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>>;
 }
 
-pub fn generate_rnd_key() -> [u8; 16] {
+pub fn generate_rnd_key() -> [u8; aes::BLOCK_SIZE] {
     extern crate rand;
     use rand::prelude::*;
 
     let mut rng = rand::thread_rng();
 
-    let mut key = [0u8; 16];
+    let mut key = [0u8; aes::BLOCK_SIZE];
     rng.fill_bytes(&mut key);
 
     key
@@ -61,7 +62,7 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> 
     new_plaintext.extend_from_slice(plaintext);
     new_plaintext.extend_from_slice(&suffix);
 
-    pkcs7::pad_inplace(&mut new_plaintext, 16)?;
+    pkcs7::pad_inplace(&mut new_plaintext, aes::BLOCK_SIZE)?;
 
     // select to either encrypt ecb/cbc
     let ecb_encrypt: bool = rng.gen();
@@ -74,7 +75,7 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> 
             EncryptionType::Ecb128,
         ))
     } else {
-        let iv: [u8; 16] = rng.gen();
+        let iv: [u8; aes::BLOCK_SIZE] = rng.gen();
         Ok((
             cbc::encrypt_128(&new_plaintext, &key, &iv)?,
             EncryptionType::Cbc128,
@@ -83,18 +84,18 @@ pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, EncryptionType)> 
 }
 
 /// ECB128 is stateless and deterministic. That is, the cipher will always be the same for a block
-/// of 16 bytes. So, this test finds if there are any blocks that are identical to each other in a
+/// of aes::BLOCK_SIZE bytes. So, this test finds if there are any blocks that are identical to each other in a
 /// text. If so, odds are it has been ECB 128 encrypted
 pub fn is_data_ecb128_encrypted(data: &[u8]) -> bool {
     use std::collections::hash_set::HashSet;
 
-    let set: HashSet<[u8; 16]> = data
-        .par_chunks_exact(16)
+    let set: HashSet<[u8; aes::BLOCK_SIZE]> = data
+        .par_chunks_exact(aes::BLOCK_SIZE)
         .map(|x| x.try_into().unwrap()) // we know the op will succeed
         .collect();
     let num_unique_blocks = set.len();
 
-    let num_blocks = data.len() / 16;
+    let num_blocks = data.len() / aes::BLOCK_SIZE;
 
     num_blocks - num_unique_blocks > 1
 }
@@ -114,7 +115,6 @@ pub fn find_block_length(oracle: &impl Cipher) -> Result<usize> {
 
     let mut err = Ok(());
     let block_length = (0..0xff)
-        .into_iter()
         .map(|i| oracle.encrypt(&vec![b'a'; i]))
         .scan(&mut err, until_err)
         .fold_while(0usize, |_, ciphertext| {
@@ -139,7 +139,7 @@ mod aes_tests {
         let unknown_text = base64::decode(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkgaGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBqdXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUgYnkK").unwrap();
 
         struct ConcattorEcbCipher {
-            key: [u8; 16],
+            key: [u8; aes::BLOCK_SIZE],
             unknown_text: Vec<u8>,
         }
 
@@ -160,7 +160,7 @@ mod aes_tests {
         };
 
         expect_eq(
-            16,
+            aes::BLOCK_SIZE,
             find_block_length(&oracle).unwrap(),
             "Finding block length",
         )

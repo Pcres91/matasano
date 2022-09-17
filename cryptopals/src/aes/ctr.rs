@@ -1,4 +1,4 @@
-use crate::common::bit_ops::xor_bytes;
+use crate::{aes, common::bit_ops::xor_bytes};
 
 use super::{
     aes128::{encrypt_block, expand_key},
@@ -6,7 +6,7 @@ use super::{
 };
 
 pub struct CtrCipher {
-    pub key: [u8; 16],
+    pub key: [u8; aes::BLOCK_SIZE],
     /// also known as iv
     pub nonce: u64,
 }
@@ -23,7 +23,7 @@ impl Cipher for CtrCipher {
 }
 
 /// Encrypt and Decrypt for CTR is identical
-pub fn encrypt_128(data: &[u8], key: &[u8; 16], nonce: u64) -> Result<Vec<u8>> {
+pub fn encrypt_128(data: &[u8], key: &[u8; aes::BLOCK_SIZE], nonce: u64) -> Result<Vec<u8>> {
     let expanded_key = expand_key(key)?;
 
     // not bothered about exact length, just need more than total num blocks
@@ -33,7 +33,7 @@ pub fn encrypt_128(data: &[u8], key: &[u8; 16], nonce: u64) -> Result<Vec<u8>> {
         .into_iter();
 
     Ok((data)
-        .chunks(16)
+        .chunks(aes::BLOCK_SIZE)
         .zip(counter) // counter production
         .flat_map(|(pt, keyblock)| xor_bytes(pt, &keyblock[0..pt.len()]).unwrap())
         .collect())

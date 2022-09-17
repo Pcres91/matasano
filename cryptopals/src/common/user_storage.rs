@@ -1,4 +1,5 @@
 use crate::{
+    aes,
     aes::ecb,
     common::{
         errors::{Result, UserStorageError},
@@ -10,7 +11,7 @@ pub static mut PROFILE_STORAGE: ProfileStorage = ProfileStorage {
     profiles: Vec::new(),
 };
 pub static mut NEXT_UID: u32 = 0;
-pub const RND_KEY: [u8; 16] = [
+pub const RND_KEY: [u8; aes::BLOCK_SIZE] = [
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
 ];
 

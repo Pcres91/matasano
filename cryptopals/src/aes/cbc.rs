@@ -1,4 +1,5 @@
 use crate::{
+    aes,
     aes::{
         pkcs7::{get_padding_for, validate_and_remove_padding},
         util::{Cipher, Result},
@@ -8,8 +9,8 @@ use crate::{
 };
 
 pub struct CbcCipher {
-    pub key: [u8; 16],
-    pub iv: Option<[u8; 16]>,
+    pub key: [u8; aes::BLOCK_SIZE],
+    pub iv: Option<[u8; aes::BLOCK_SIZE]>,
 }
 
 impl Cipher for CbcCipher {
@@ -39,21 +40,21 @@ impl Cipher for CbcCipher {
 // }
 
 pub fn encrypt_128_zero_iv(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let iv = vec![0u8; 16];
+    let iv = vec![0u8; aes::BLOCK_SIZE];
     encrypt_128(plaintext, key, &iv)
 }
 
 pub fn encrypt_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     let expanded_key = aes128::expand_key(key)?;
 
-    let padding = get_padding_for(plaintext, 16)?;
+    let padding = get_padding_for(plaintext, aes::BLOCK_SIZE)?;
 
     let plaintext_blocks = [plaintext, &padding].concat();
 
     expect_true(
-        plaintext_blocks.len() % 16 == 0,
+        plaintext_blocks.len() % aes::BLOCK_SIZE == 0,
         format!(
-            "plaintext must be composed of 16 byte blocks, got length {}",
+            "plaintext must be composed of aes::BLOCK_SIZE byte blocks, got length {}",
             plaintext_blocks.len()
         )
         .as_str(),
@@ -62,12 +63,15 @@ pub fn encrypt_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     let mut ciphertext = vec![0u8; 0];
 
     // for each plaintext block...
-    for idx in (0..plaintext_blocks.len()).step_by(16) {
+    for idx in (0..plaintext_blocks.len()).step_by(aes::BLOCK_SIZE) {
         // XOR with previous block...
         let block = if idx == 0 {
-            xor_16_bytes(&plaintext_blocks[idx..idx + 16], &iv)
+            xor_16_bytes(&plaintext_blocks[idx..idx + aes::BLOCK_SIZE], &iv)
         } else {
-            xor_16_bytes(&plaintext_blocks[idx..idx + 16], &ciphertext[idx - 16..idx])
+            xor_16_bytes(
+                &plaintext_blocks[idx..idx + aes::BLOCK_SIZE],
+                &ciphertext[idx - aes::BLOCK_SIZE..idx],
+            )
         };
         // and encrypt the block
         ciphertext.extend_from_slice(&aes128::encrypt_block(&block, &expanded_key)?);
@@ -76,14 +80,14 @@ pub fn encrypt_128(plaintext: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
 }
 
 pub fn decrypt_128_zero_iv(ciphertext: &[u8], key: &[u8], keep_padding: bool) -> Result<Vec<u8>> {
-    let iv = [0u8; 16];
+    let iv = [0u8; aes::BLOCK_SIZE];
     decrypt_128(ciphertext, key, &iv, keep_padding)
 }
 
 pub fn decrypt_128(
     ciphertext: &[u8],
     key: &[u8],
-    iv: &[u8; 16],
+    iv: &[u8; aes::BLOCK_SIZE],
     keep_padding: bool,
 ) -> Result<Vec<u8>> {
     let expanded_key = aes128::expand_key(key)?;
@@ -91,15 +95,15 @@ pub fn decrypt_128(
     let mut plaintext = vec![0u8; 0];
 
     // for each block...
-    for idx in (0..ciphertext.len()).step_by(16) {
+    for idx in (0..ciphertext.len()).step_by(aes::BLOCK_SIZE) {
         // decrypt the block...
-        let block = aes128::decrypt_block(&ciphertext[idx..idx + 16], &expanded_key)?;
+        let block = aes128::decrypt_block(&ciphertext[idx..idx + aes::BLOCK_SIZE], &expanded_key)?;
 
         // XOR with previous block...
         plaintext.extend(if idx == 0 {
             xor_16_bytes(&block, iv).to_vec()
         } else {
-            xor_16_bytes(&block, &ciphertext[idx - 16..idx]).to_vec()
+            xor_16_bytes(&block, &ciphertext[idx - aes::BLOCK_SIZE..idx]).to_vec()
         })
     }
 
@@ -135,8 +139,8 @@ pub mod cbc_tests {
     fn test_cbc_against_known_values() {
         // values taken from https://docs.rs/cbc/latest/cbc/#
         use hex_literal::hex;
-        let key = [0x42; 16];
-        let iv = [0x24; 16];
+        let key = [0x42; aes::BLOCK_SIZE];
+        let iv = [0x24; aes::BLOCK_SIZE];
         let plaintext_expected = *b"hello world! this is my plaintext.";
         let ciphertext_expected = hex!(
             "c7fe247ef97b21f07cbdd26cb5d346bf"

@@ -1,10 +1,8 @@
-use crate::{
-    aes::pkcs7::{is_padding_valid_for, validate_and_remove_padding},
-    mt19937::*,
-};
 #[allow(unused_imports)]
 use crate::{
+    aes,
     aes::{
+        pkcs7::*,
         util::{generate_rnd_key, Cipher},
         *,
     },
@@ -17,7 +15,12 @@ use crate::{
         util::{until_err, Wrap},
     },
 };
+use crate::{
+    aes::pkcs7::{is_padding_valid_for, validate_and_remove_padding},
+    mt19937::*,
+};
 use rand::{thread_rng, Rng};
+use rayon::prelude::*;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
@@ -42,19 +45,19 @@ pub fn challenge17() -> Result<()> {
     expect_eq(10, lines.len(), "10 messages in file")?;
 
     struct CbcOracleMutIv {
-        key: [u8; 16],
-        iv: [u8; 16],
+        key: [u8; aes::BLOCK_SIZE],
+        iv: [u8; aes::BLOCK_SIZE],
     }
 
     let oracle = CbcOracleMutIv {
         // key: generate_rnd_key(),
         // iv: generate_rnd_key(),
-        key: (0..16u8)
+        key: (0..aes::BLOCK_SIZE as u8)
             .into_iter()
             .collect::<Vec<u8>>()
             .try_into()
             .unwrap(),
-        iv: (16..32u8)
+        iv: (aes::BLOCK_SIZE as u8..32u8)
             .into_iter()
             .collect::<Vec<u8>>()
             .try_into()
@@ -63,14 +66,15 @@ pub fn challenge17() -> Result<()> {
 
     let plaintext_real = lines[thread_rng().gen_range(0..lines.len())].clone();
 
-    let encryptor = || -> Result<(Vec<u8>, [u8; 16])> {
-        let ciphertext = cbc::encrypt_128(&plaintext_real[0..16], &oracle.key, &oracle.iv)?;
+    let encryptor = || -> Result<(Vec<u8>, [u8; aes::BLOCK_SIZE])> {
+        let ciphertext = cbc::encrypt_128(&plaintext_real[..], &oracle.key, &oracle.iv)?;
         Ok((ciphertext, oracle.iv.clone()))
     };
 
-    let decryptor = |ciphertext_in: &[u8], iv_in: &[u8; 16]| -> (bool, Vec<u8>) {
-        let tmp = cbc::decrypt_128(&ciphertext_in, &oracle.key, iv_in, true).unwrap();
-        match is_padding_valid_for(&tmp, 16).unwrap() {
+    let decryptor = |ciphertext_in: &[u8], iv_in: &[u8]| -> (bool, Vec<u8>) {
+        let tmp =
+            cbc::decrypt_128(&ciphertext_in, &oracle.key, iv_in.try_into().unwrap(), true).unwrap();
+        match is_padding_valid_for(&tmp, aes::BLOCK_SIZE).unwrap() {
             true => (true, validate_and_remove_padding(&tmp).unwrap()),
             false => (false, tmp),
         }
@@ -78,50 +82,88 @@ pub fn challenge17() -> Result<()> {
 
     let (ciphertext, _) = encryptor()?;
 
-    // for each block, decrypt using the padded block cipher
-    let single_block_attack = |block: &[u8; 16], previous_block: &[u8; 16]| -> Result<Vec<u8>> {
-        let mut zeroing_iv = previous_block.clone();
+    let create_forced_iv = |iv: &[u8; aes::BLOCK_SIZE],
+                            guessed_byte: u8,
+                            padding_len: usize,
+                            found_plaintext: &[u8]|
+     -> Vec<u8> {
+        let index_of_forced_char = iv.len() - padding_len;
 
-        for pad_val in 1..=16 {
-            let mut padding_iv: [u8; 16] = xor_with_single_byte(block, pad_val).try_into().unwrap();
+        let mut forced_character = iv[index_of_forced_char] ^ guessed_byte ^ padding_len as u8;
 
-            for candidate in 0..=0xffu8 {
-                // print!("j: {:3} ", candidate);
-                padding_iv[padding_iv.len() - pad_val as usize] = candidate;
+        let mut output = [&iv[..index_of_forced_char], &[forced_character][..]].concat();
 
-                if decryptor(block, &padding_iv).0 {
-                    if pad_val == 1 {
-                        padding_iv[padding_iv.len() - pad_val as usize - 1] ^= 1;
-                        if !decryptor(block, &padding_iv).0 {
-                            println!("false positive, continuing...");
-                            continue;
-                        }
-                    }
-
-                    zeroing_iv[padding_iv.len() - pad_val as usize] = candidate ^ pad_val;
-                    break;
-                } else if candidate == 0xffu8 {
-                    return Err(AesError::Cbc128Error(
-                        "Unable to find a suitable candidate".into(),
-                    )
-                    .into());
-                }
-            }
+        for k in aes::BLOCK_SIZE - padding_len + 1..aes::BLOCK_SIZE {
+            forced_character = iv[k] ^ found_plaintext[k] ^ padding_len as u8;
+            output.push(forced_character);
         }
-
-        Ok(zeroing_iv.to_vec())
+        output
     };
 
-    // let block: &[u8; 16] = &ciphertext[ciphertext.len() - 16..].try_into().unwrap();
-    // let plaintext_block = single_block_attack(block, &oracle.iv)?;
+    let candidate_is_the_plaintext_byte =
+        |candidate_idx: usize, ct_block: &[u8], padding_iv: &mut [u8]| -> bool {
+            if decryptor(ct_block.try_into().unwrap(), padding_iv).0 {
+                if candidate_idx == aes::BLOCK_SIZE - 1 {
+                    padding_iv[candidate_idx - 1] ^= 1;
+                    if !decryptor(ct_block, &padding_iv).0 {
+                        return false;
+                    }
+                }
+                true
+            } else {
+                false
+            }
+        };
 
-    let plaintext: Vec<u8> = ciphertext
-        .chunks_exact(16)
-        .rev()
-        .flat_map(|block| single_block_attack(&block.try_into().unwrap(), &oracle.iv))
-        .flatten()
+    // for each block, decrypt using the padded oracle attack
+    let single_block_attack =
+        |ct_block: &[u8; aes::BLOCK_SIZE], previous_block: &[u8; aes::BLOCK_SIZE]| -> Vec<u8> {
+            let mut decrypted = vec![0u8; 16];
+
+            (1..=aes::BLOCK_SIZE).for_each(|pad_val| {
+                let candidate_idx = aes::BLOCK_SIZE - pad_val as usize;
+
+                decrypted[candidate_idx] = (0..=0xffu8)
+                    .par_bridge()
+                    .map(|candidate| {
+                        (
+                            candidate,
+                            create_forced_iv(&previous_block, candidate, pad_val, &decrypted),
+                        )
+                    })
+                    .fold(
+                        || 0u8,
+                        |acc, (candidate, mut forced_iv)| {
+                            acc + if candidate_is_the_plaintext_byte(
+                                candidate_idx,
+                                ct_block,
+                                &mut forced_iv,
+                            ) {
+                                candidate
+                            } else {
+                                0
+                            }
+                        },
+                    )
+                    .sum::<u8>();
+            });
+            decrypted
+        };
+
+    let ciphertext_blocks = [oracle.iv.to_vec(), ciphertext].concat();
+    let mut ct_iter = ciphertext_blocks.chunks_exact(aes::BLOCK_SIZE);
+    ct_iter.next();
+    let mut plaintext: Vec<u8> = ct_iter
+        .zip(ciphertext_blocks.chunks_exact(aes::BLOCK_SIZE))
+        .flat_map(|(block, prev_block)| {
+            single_block_attack(block.try_into().unwrap(), prev_block.try_into().unwrap())
+        })
         .collect();
 
+    if is_padding_valid_for(&plaintext, aes::BLOCK_SIZE)? {
+        plaintext = validate_and_remove_padding(&plaintext)?;
+    }
+    println!("{}", Wrap(plaintext.clone()));
     expect_eq(
         plaintext_real,
         plaintext,

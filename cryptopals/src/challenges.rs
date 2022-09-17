@@ -1,4 +1,5 @@
 use crate::{
+    aes,
     aes::{pkcs7::*, util::Cipher, *},
     base64,
     common::{
@@ -43,7 +44,10 @@ pub fn print_challenge_result(challenge_number: i32, challenge: &dyn Fn() -> Res
     match challenge() {
         Ok(_) => println!("SUCCESSFUL: Challenge {challenge_number}"),
         Err(error) => {
-            println!("FAILED:     Challenge {challenge_number}, {error}\n\n{:#?}", error);
+            println!(
+                "FAILED:     Challenge {challenge_number}, {error}\n\n{:#?}",
+                error
+            );
         }
     }
     println!("-----{:.2?}-----", timer.elapsed());
@@ -288,7 +292,7 @@ pub fn challenge12() -> Result<()> {
     let expected = "Rollin' in my 5.0\nWith my rag-top down so my hair can blow\nThe girlies on standby waving just to say hi\nDid you stop? No, I just drove by\n";
 
     struct ConcattorEcbCipher {
-        key: [u8; 16],
+        key: [u8; aes::BLOCK_SIZE],
         unknown_text: Vec<u8>,
     }
 
@@ -317,7 +321,11 @@ pub fn challenge12() -> Result<()> {
     // find block size
     let block_size = aes::util::find_block_length(&oracle)?;
 
-    expect_eq(16, block_size, "Finding block length of encryption oracle")?;
+    expect_eq(
+        aes::BLOCK_SIZE,
+        block_size,
+        "Finding block length of encryption oracle",
+    )?;
 
     // find whether it's in ecb 128 mode
     if !aes::util::is_data_ecb128_encrypted(&oracle.encrypt(&vec![b'a'; block_size * 5])?) {
@@ -330,28 +338,28 @@ pub fn challenge12() -> Result<()> {
     // decrypt the text
     let mut result: Vec<u8> = Vec::new();
 
-    for idx in (0..unknown_text.len()).step_by(16) {
-        let end_idx = if idx + 16 < unknown_text.len() {
-            idx + 16
+    for idx in (0..unknown_text.len()).step_by(aes::BLOCK_SIZE) {
+        let end_idx = if idx + aes::BLOCK_SIZE < unknown_text.len() {
+            idx + aes::BLOCK_SIZE
         } else {
             unknown_text.len()
         };
 
-        let mut new_input_block = vec![b'A'; 16];
+        let mut new_input_block = vec![b'A'; aes::BLOCK_SIZE];
 
         let num_chars_to_find = end_idx - idx;
         for char_idx in 0..num_chars_to_find {
-            let input_block = vec![b'A'; 16 - char_idx - 1];
+            let input_block = vec![b'A'; aes::BLOCK_SIZE - char_idx - 1];
 
             oracle.set_text(&unknown_text[idx..end_idx]);
 
             let ecb_input_block_with_unkown = oracle.encrypt(&input_block)?;
-            let expected_block = ecb_input_block_with_unkown[..16].to_vec();
+            let expected_block = ecb_input_block_with_unkown[..aes::BLOCK_SIZE].to_vec();
 
             for i in common::util::SMART_ASCII.iter() {
                 new_input_block[15] = *i;
                 let new_output = oracle.encrypt(&new_input_block)?;
-                if new_output[..16] == expected_block[..] {
+                if new_output[..aes::BLOCK_SIZE] == expected_block[..] {
                     result.push(*i);
 
                     new_input_block.remove(0);
@@ -390,11 +398,11 @@ pub fn challenge13() -> Result<()> {
         use std::str::from_utf8;
         let ciphertext = create_hash_profile_for(from_utf8(&payload)?)?;
 
-        // for i in 0..ciphertext.len() / 16 {
+        // for i in 0..ciphertext.len() / aes::BLOCK_SIZE {
         //     println!(
         //         "{}||",
         //         Wrap(aes::decrypt_ecb_128(
-        //             &ciphertext[i * 16..i * 16 + 16],
+        //             &ciphertext[i * aes::BLOCK_SIZE..i * aes::BLOCK_SIZE + aes::BLOCK_SIZE],
         //             &RND_KEY
         //         )?)
         //     );
@@ -421,7 +429,7 @@ pub fn challenge14() -> Result<()> {
     }
 
     struct Ch14Cipher {
-        key: [u8; 16],
+        key: [u8; aes::BLOCK_SIZE],
     }
 
     impl aes::util::Cipher for Ch14Cipher {
@@ -445,16 +453,17 @@ pub fn challenge14() -> Result<()> {
     let mut num_pad = 0usize;
 
     while !found_text_length {
-        let mut padding = vec![16u8; 16];
+        let mut padding = vec![aes::BLOCK_SIZE as u8; aes::BLOCK_SIZE];
         padding.extend_from_slice(&vec![b'A'; num_pad]);
         padding.extend_from_slice(&string_to_find.as_bytes()[..]);
         let cipher = cipher.encrypt(&padding)?;
 
-        if cipher[cipher.len() - 16..cipher.len()] == padding_cipher_block[..] {
-            for idx in (0..cipher.len() / 16 - 1).step_by(16) {
-                if &cipher[idx..idx + 16] == &padding_cipher_block[..] {
+        if cipher[cipher.len() - aes::BLOCK_SIZE..cipher.len()] == padding_cipher_block[..] {
+            for idx in (0..cipher.len() / aes::BLOCK_SIZE - 1).step_by(aes::BLOCK_SIZE) {
+                if &cipher[idx..idx + aes::BLOCK_SIZE] == &padding_cipher_block[..] {
                     found_text_length = true;
-                    text_length = cipher.len() - (idx + 16 + num_pad) - 16;
+                    text_length =
+                        cipher.len() - (idx + aes::BLOCK_SIZE + num_pad) - aes::BLOCK_SIZE;
                     // println!("text length: {}", text_length);
                 }
             }
@@ -466,16 +475,16 @@ pub fn challenge14() -> Result<()> {
 
     let mut found_chars: Vec<u8> = Vec::new();
 
-    for block_idx in (0..text_length).step_by(16) {
-        let end_block_idx = if block_idx + 16 > text_length {
+    for block_idx in (0..text_length).step_by(aes::BLOCK_SIZE) {
+        let end_block_idx = if block_idx + aes::BLOCK_SIZE > text_length {
             text_length
         } else {
-            block_idx + 16
+            block_idx + aes::BLOCK_SIZE
         };
 
         let num_chars_to_find = end_block_idx - block_idx;
         while found_chars.len() != num_chars_to_find {
-            let mut payload = vec![16u8; 16];
+            let mut payload = vec![aes::BLOCK_SIZE as u8; aes::BLOCK_SIZE];
 
             let num_known_bytes = 15 - found_chars.len();
             payload.extend_from_slice(&vec![b'A'; num_known_bytes]);
@@ -484,9 +493,9 @@ pub fn challenge14() -> Result<()> {
 
             let ciphertext = cipher.encrypt(&payload)?;
 
-            for idx in (0..ciphertext.len() / 16 - 1).step_by(16) {
-                if ciphertext[idx..idx + 16] == padding_cipher_block[..] {
-                    let mut char_decryptor_block: Vec<u8> = payload[16..31].to_vec();
+            for idx in (0..ciphertext.len() / aes::BLOCK_SIZE - 1).step_by(aes::BLOCK_SIZE) {
+                if ciphertext[idx..idx + aes::BLOCK_SIZE] == padding_cipher_block[..] {
+                    let mut char_decryptor_block: Vec<u8> = payload[aes::BLOCK_SIZE..31].to_vec();
                     char_decryptor_block.push(b'A');
 
                     for i in common::util::SMART_ASCII.iter() {
@@ -494,8 +503,8 @@ pub fn challenge14() -> Result<()> {
 
                         let mut char_decrypt_cipher = cipher.encrypt(&char_decryptor_block)?;
                         while false {
-                            if char_decrypt_cipher
-                                [char_decrypt_cipher.len() - 16..char_decrypt_cipher.len()]
+                            if char_decrypt_cipher[char_decrypt_cipher.len() - aes::BLOCK_SIZE
+                                ..char_decrypt_cipher.len()]
                                 == padding_cipher_block[..]
                             {
                                 break;
@@ -504,9 +513,9 @@ pub fn challenge14() -> Result<()> {
                             char_decrypt_cipher = cipher.encrypt(&char_decryptor_block)?;
                         }
 
-                        if char_decrypt_cipher
-                            [char_decrypt_cipher.len() - 32..char_decrypt_cipher.len() - 16]
-                            == ciphertext[idx + 16..idx + 32]
+                        if char_decrypt_cipher[char_decrypt_cipher.len() - 32
+                            ..char_decrypt_cipher.len() - aes::BLOCK_SIZE]
+                            == ciphertext[idx + aes::BLOCK_SIZE..idx + 32]
                         {
                             found_chars.push(*i);
                         }
@@ -573,7 +582,7 @@ pub fn challenge16() -> Result<()> {
     }
 
     struct BaconCipher {
-        key: [u8; 16],
+        key: [u8; aes::BLOCK_SIZE],
     }
 
     impl aes::util::Cipher for BaconCipher {

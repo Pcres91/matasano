@@ -24,7 +24,11 @@ pub fn xor_bytes_tuple_no_fail(val: (&[u8], &[u8])) -> Vec<u8> {
 pub fn xor_bytes(left: &[u8], right: &[u8]) -> Result<Vec<u8>> {
     expect_eq(left.len(), right.len(), "Lengths of the two slices to xor")?;
 
-    Ok(left.into_par_iter().zip(right).map(|(l, r)| l ^ r).collect())
+    Ok(left
+        .into_par_iter()
+        .zip(right)
+        .map(|(l, r)| l ^ r)
+        .collect())
 }
 
 // performs a per-bit operation using bitstreams.Bit of overkill
