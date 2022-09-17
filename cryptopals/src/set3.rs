@@ -44,36 +44,32 @@ pub fn challenge17() -> Result<()> {
     err?;
     expect_eq(10, lines.len(), "10 messages in file")?;
 
-    struct CbcOracleMutIv {
+    struct PaddingOracle {
         key: [u8; aes::BLOCK_SIZE],
         iv: [u8; aes::BLOCK_SIZE],
     }
 
-    let oracle = CbcOracleMutIv {
-        // key: generate_rnd_key(),
-        // iv: generate_rnd_key(),
-        key: (0..aes::BLOCK_SIZE as u8)
-            .into_iter()
-            .collect::<Vec<u8>>()
-            .try_into()
-            .unwrap(),
-        iv: (aes::BLOCK_SIZE as u8..32u8)
-            .into_iter()
-            .collect::<Vec<u8>>()
-            .try_into()
-            .unwrap(),
+    let padding_oracle = PaddingOracle {
+        key: generate_rnd_key(),
+        iv: generate_rnd_key(),
     };
 
     let plaintext_real = lines[thread_rng().gen_range(0..lines.len())].clone();
 
     let encryptor = || -> Result<(Vec<u8>, [u8; aes::BLOCK_SIZE])> {
-        let ciphertext = cbc::encrypt_128(&plaintext_real[..], &oracle.key, &oracle.iv)?;
-        Ok((ciphertext, oracle.iv.clone()))
+        let ciphertext =
+            cbc::encrypt_128(&plaintext_real[..], &padding_oracle.key, &padding_oracle.iv)?;
+        Ok((ciphertext, padding_oracle.iv.clone()))
     };
 
     let decryptor = |ciphertext_in: &[u8], iv_in: &[u8]| -> bool {
-        let tmp =
-            cbc::decrypt_128(&ciphertext_in, &oracle.key, iv_in.try_into().unwrap(), true).unwrap();
+        let tmp = cbc::decrypt_128(
+            &ciphertext_in,
+            &padding_oracle.key,
+            iv_in.try_into().unwrap(),
+            true,
+        )
+        .unwrap();
         is_padding_valid_for(&tmp, aes::BLOCK_SIZE).unwrap()
     };
 
@@ -147,7 +143,7 @@ pub fn challenge17() -> Result<()> {
             decrypted
         };
 
-    let ciphertext_blocks = [oracle.iv.to_vec(), ciphertext].concat();
+    let ciphertext_blocks = [padding_oracle.iv.to_vec(), ciphertext].concat();
     let mut ct_iter = ciphertext_blocks.chunks_exact(aes::BLOCK_SIZE);
     ct_iter.next();
 
