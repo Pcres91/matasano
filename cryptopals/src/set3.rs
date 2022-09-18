@@ -16,18 +16,23 @@ use crate::{
     },
     mt19937::*,
 };
+use itertools::{FoldWhile, Itertools};
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
-use std::io::{prelude::*, BufReader};
 use std::{convert::TryInto, slice::Iter};
 use std::{fs::File, iter::Peekable};
+use std::{
+    io::{prelude::*, BufReader},
+    time::SystemTime,
+};
 
 pub fn set3() {
-    print_challenge_result(17, &challenge17);
-    print_challenge_result(18, &challenge18);
-    print_challenge_result(19, &challenge19);
-    print_challenge_result(20, &challenge20);
-    print_challenge_result(21, &challenge21);
+    // print_challenge_result(17, &challenge17);
+    // print_challenge_result(18, &challenge18);
+    // print_challenge_result(19, &challenge19);
+    // print_challenge_result(20, &challenge20);
+    // print_challenge_result(21, &challenge21);
+    print_challenge_result(22, &challenge22);
 }
 
 /// CBC padding oracle attack best explained here https://research.nccgroup.com/2021/02/17/cryptopals-exploiting-cbc-padding-oracles/
@@ -363,7 +368,7 @@ pub fn challenge20() -> Result<()> {
     Ok(())
 }
 
-/// implement MS19937 Mersenne Twister
+/// implement MT19937 Mersenne Twister
 pub fn challenge21() -> Result<()> {
     let mut gen32 = Mt19937::default();
 
@@ -396,6 +401,35 @@ pub fn challenge21() -> Result<()> {
     Ok(())
 }
 
+/// cracking the seed of a Mersenne Twister
+pub fn challenge22() -> Result<()> {
+    let s = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
+    let passage_of_time = thread_rng().gen_range(40..1000);
+
+    let mut rnd = Mt19937::seeded(s.as_secs() as u32);
+
+    let expected = rnd.next();
+
+    let current_time = s.as_secs() as u32 + passage_of_time;
+
+    // just seed MT's with unix timestamps going back 1sec until we hit a match
+    let found = (0..current_time)
+        .rev()
+        .fold_while(0u32, |_acc, ts| {
+            let mut mt = Mt19937::seeded(ts);
+            if mt.next() != expected {
+                FoldWhile::Continue(0)
+            } else {
+                FoldWhile::Done(ts)
+            }
+        })
+        .into_inner();
+
+    expect_eq(s.as_secs() as u32, found, "found the seed")?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod set3_tests {
     use super::*;
@@ -418,5 +452,9 @@ mod set3_tests {
     #[test]
     fn test_challenge21() {
         challenge21().unwrap();
+    }
+    #[test]
+    fn test_challenge22() {
+        challenge22().unwrap();
     }
 }

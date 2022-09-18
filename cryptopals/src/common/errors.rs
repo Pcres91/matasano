@@ -1,5 +1,5 @@
 use hex::FromHexError;
-use std::string::FromUtf8Error;
+use std::{string::FromUtf8Error, time::SystemTimeError};
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, CryptoError>;
@@ -14,6 +14,8 @@ pub enum CryptoError {
     ExpectationFailure(#[from] ExpectationFailure),
     #[error("UserStorageError encountered.")]
     UserStorageError(#[from] UserStorageError),
+    #[error("SystemTimeError encountered.")]
+    SystemTimeError(#[from] SystemTimeError),
     #[error("HexError encountered.")]
     HexError(#[from] FromHexError),
     #[error("IoError encountered.")]
