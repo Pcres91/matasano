@@ -1,7 +1,7 @@
-#[allow(unused_imports)]
-use crate::common::expectations::{expect_eq, expect_false, expect_true};
-use crate::common::{bit_ops::xor_with_single_byte, errors::Result};
-
+use crate::common::{
+    expectations::*,
+    {bit_ops::xor_with_single_byte, errors::Result},
+};
 use bitstream_io::{BigEndian, BitRead, BitReader};
 use rayon::prelude::*;
 use std::collections::BTreeMap;

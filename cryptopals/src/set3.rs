@@ -2,22 +2,18 @@
 use crate::{
     aes,
     aes::{
-        pkcs7::*,
+        pkcs7::{is_padding_valid_for, validate_and_remove_padding},
         util::{generate_rnd_key, Cipher},
         *,
     },
     base64,
     challenges::print_challenge_result,
     common::{
-        bit_ops::xor_with_single_byte,
+        bit_ops::{xor_bytes, xor_with_single_byte},
         errors::{AesError, Result},
         expectations::*,
-        util::{get_slice, until_err, Wrap},
+        util::{find_best_character_key, get_slice, try_display, until_err, Wrap},
     },
-};
-use crate::{
-    aes::pkcs7::{is_padding_valid_for, validate_and_remove_padding},
-    common::{bit_ops::xor_bytes, util::find_best_character_key},
     mt19937::*,
 };
 use rand::{thread_rng, Rng};
@@ -30,6 +26,7 @@ pub fn set3() {
     print_challenge_result(17, &challenge17);
     print_challenge_result(18, &challenge18);
     print_challenge_result(19, &challenge19);
+    print_challenge_result(20, &challenge20);
     print_challenge_result(21, &challenge21);
 }
 
@@ -257,7 +254,6 @@ pub fn challenge19() -> Result<()> {
 
     let keystream = sliced_data
         .iter()
-        // .filter(|v| v.len() >= reasonable_num_to_check_with)
         .map(|v| find_best_character_key(&v))
         .collect::<Vec<u8>>();
 
@@ -268,6 +264,7 @@ pub fn challenge19() -> Result<()> {
         .map(|v| {
             xor_bytes(v, &keystream[..v.len()]).unwrap()
             // these will actually never fail because we'll always try find a char key
+            // it'll just have a couple funny characters towards the end of the longer lines
             // println!("{}", try_display(&res));
         })
         .collect::<Vec<Vec<u8>>>();
@@ -281,8 +278,93 @@ pub fn challenge19() -> Result<()> {
     Ok(())
 }
 
+/// identical to challenge 19
+pub fn challenge20() -> Result<()> {
+    let mut err = Ok(());
+    let reader = BufReader::new(File::open("20.txt")?);
+    let lines = reader
+        .lines()
+        .map(|line| base64::decode(line?.as_bytes()))
+        .scan(&mut err, until_err)
+        .collect::<Vec<Vec<u8>>>();
+    err?;
+
+    let cipher = ctr::CtrCipher {
+        key: generate_rnd_key(),
+        nonce: 0,
+    };
+
+    let encrypted_lines = lines
+        .par_iter()
+        .map(|line| cipher.encrypt(&line).unwrap())
+        .collect::<Vec<Vec<u8>>>();
+    expect_eq(60, encrypted_lines.len(), "no encryptions failed")?;
+
+    // using a similar attack to ch6, we know that for each ciphertext, byte 0 for each ciphertext has been
+    // encrypted against the same byte of the keystream. This allows us to score against a single byte for all, to find a
+    // most reasonable byte.
+    let mut iters = encrypted_lines
+        .iter()
+        .map(|line| line.iter().peekable())
+        .collect::<Vec<Peekable<Iter<u8>>>>();
+
+    let data_available = |iters: &mut Vec<Peekable<Iter<u8>>>| -> bool {
+        iters.iter_mut().any(|it| it.peek() != None)
+    };
+
+    // take 1st byte of each vec and bunch, 2nd byte and bunch, etc
+    let mut sliced_data: Vec<Vec<u8>> = Vec::new();
+    while data_available(&mut iters) {
+        sliced_data.push(
+            iters
+                .iter_mut()
+                .filter_map(|it| it.next())
+                .map(|c| *c)
+                .collect(),
+        );
+    }
+
+    let keystream = sliced_data
+        .iter()
+        .map(|v| find_best_character_key(&v))
+        .collect::<Vec<u8>>();
+
+    // https://www.poetryfoundation.org/poems/43289/easter-1916
+    // Easter, by William Yeats
+    let plaintext_lines = encrypted_lines
+        .iter()
+        .map(|v| {
+            let res = xor_bytes(v, &keystream[..v.len()]).unwrap();
+            // these will actually never fail because we'll always try find a char key
+            // it'll just have a couple funny characters towards the end of the longer lines
+            // println!("{}", try_display(&res));
+            res
+        })
+        .collect::<Vec<Vec<u8>>>();
+
+    let expected_10th_line =
+        b"terror in the styles, never error-files / Indeed I'm known-your exiled!".to_vec();
+
+    let num_chars_same = expected_10th_line
+        .iter()
+        .zip(plaintext_lines[10].iter())
+        .filter(|(l, r)| l == r)
+        .count();
+
+    let pct_correct = num_chars_same as f32 / expected_10th_line.len() as f32;
+
+    expect_true(
+        pct_correct > 0.95,
+        &format!(
+            "The 11th line is short enough that statistically we should get >95% correct. Got {pct_correct}"
+        ),
+    )?;
+
+    Ok(())
+}
+
 /// implement MS19937 Mersenne Twister
-fn challenge21() -> Result<()> {
+pub fn challenge21() -> Result<()> {
     let mut gen32 = Mt19937::new();
 
     let reader32 = BufReader::new(File::open("21_32bit_test.txt").unwrap());
@@ -328,6 +410,10 @@ mod set3_tests {
     #[test]
     fn test_challenge19() {
         challenge19().unwrap();
+    }
+    #[test]
+    fn test_challenge20() {
+        challenge20().unwrap();
     }
     #[test]
     fn test_challenge21() {

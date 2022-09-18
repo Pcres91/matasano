@@ -1,10 +1,7 @@
-use crate::common::errors::Result;
+use crate::common::{errors::Result, expectations::*};
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 use rayon::prelude::*;
 use std::io::Cursor;
-
-#[allow(unused_imports)]
-use crate::common::expectations::{expect_eq, expect_false, expect_true};
 
 ///xor exactly 16 bytes on the stack
 pub fn xor_16_bytes(left: &[u8], right: &[u8]) -> [u8; 16] {

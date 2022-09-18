@@ -97,7 +97,7 @@ pub fn validate_and_remove_padding(data: &[u8]) -> Result<Vec<u8>> {
 mod pkcs7_tests {
     use super::*;
 
-    use crate::common::expectations::{expect_false, expect_true};
+    use crate::common::expectations::*;
 
     #[test]
     fn test_pkcs7_pads_entirely_new_block() {

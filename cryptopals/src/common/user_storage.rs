@@ -3,7 +3,7 @@ use crate::{
     aes::ecb,
     common::{
         errors::{Result, UserStorageError},
-        expectations::{expect_eq, expect_true},
+        expectations::*,
     },
 };
 
