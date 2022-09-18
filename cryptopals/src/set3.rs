@@ -365,7 +365,7 @@ pub fn challenge20() -> Result<()> {
 
 /// implement MS19937 Mersenne Twister
 pub fn challenge21() -> Result<()> {
-    let mut gen32 = Mt19937::new();
+    let mut gen32 = Mt19937::default();
 
     let reader32 = BufReader::new(File::open("21_32bit_test.txt").unwrap());
 
@@ -380,7 +380,7 @@ pub fn challenge21() -> Result<()> {
             expect_eq(expected, gen32.next(), &format!("testing {i}th value"))
         })?;
 
-    let mut gen_64 = Mt19937_64::new();
+    let mut gen_64 = Mt19937_64::default();
 
     let reader = BufReader::new(File::open("21_test.txt")?);
 

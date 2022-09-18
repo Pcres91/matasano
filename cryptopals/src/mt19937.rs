@@ -18,8 +18,8 @@ pub struct Mt19937 {
     index: usize,
 }
 
-impl Mt19937 {
-    pub fn new() -> Self {
+impl Default for Mt19937 {
+    fn default() -> Self {
         let mut new = Mt19937 {
             mt: [0u32; N_32],
             index: N as usize + 1,
@@ -27,7 +27,9 @@ impl Mt19937 {
         new.seed(5489);
         new
     }
+}
 
+impl Mt19937 {
     pub fn seeded(seed: u32) -> Self {
         let mut new = Mt19937 {
             mt: [0u32; N_32],
@@ -89,8 +91,8 @@ pub struct Mt19937_64 {
     index: usize,
 }
 
-impl Mt19937_64 {
-    pub fn new() -> Self {
+impl Default for Mt19937_64 {
+    fn default() -> Self {
         let mut new = Mt19937_64 {
             mt: [0u64; N],
             index: N as usize + 1,
@@ -98,7 +100,9 @@ impl Mt19937_64 {
         new.seed(5489);
         new
     }
+}
 
+impl Mt19937_64 {
     pub fn seeded(seed: u64) -> Self {
         let mut new = Mt19937_64 {
             mt: [0u64; N],
@@ -170,7 +174,7 @@ mod test_mersenne_twister {
 
     #[test]
     fn test_against_cpp_std_out() {
-        let mut gen = Mt19937::new();
+        let mut gen = Mt19937::default();
 
         let reader = BufReader::new(File::open("21_32bit_test.txt").unwrap());
 
@@ -185,7 +189,7 @@ mod test_mersenne_twister {
 
     #[test]
     fn test_64bit_seed() {
-        let gen_64 = Mt19937_64::new();
+        let gen_64 = Mt19937_64::default();
 
         expect_eq(5489, gen_64.mt[0], "").unwrap();
         expect_eq(13057201162865595358, gen_64.mt[1], "").unwrap();
@@ -503,7 +507,7 @@ mod test_mersenne_twister {
 
     #[test]
     fn test_64bit_against_cpp_std_out() {
-        let mut gen_64 = Mt19937_64::new();
+        let mut gen_64 = Mt19937_64::default();
 
         let reader = BufReader::new(File::open("21_test.txt").unwrap());
 
