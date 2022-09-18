@@ -1,7 +1,6 @@
 const W: u64 = 64;
 const N: usize = 312;
 const M: usize = 156;
-// const R: u64 = 31;
 const A: u64 = 0xb5026f5aa96619e9;
 const F: u64 = 6364136223846793005;
 const UPPER_MASK: u64 = 0xFFFFFFFF80000000u64;
@@ -12,9 +11,11 @@ const M_32: usize = 397;
 const MATRIX_A_32: u32 = 0x9908b0df;
 const UPPER_MASK_32: u32 = 0x80000000;
 const LOWER_MASK_32: u32 = 0x7fffffff;
+pub const MT19337_A_32: u32 = 0x9d2c5680;
+pub const MT19337_B_32: u32 = 0xefc60000;
 
 pub struct Mt19937 {
-    mt: [u32; N_32],
+    pub mt: [u32; N_32],
     index: usize,
 }
 
@@ -50,9 +51,15 @@ impl Mt19937 {
         self.index = N_32
     }
 
+    pub fn set_internal_state(self: &mut Self, state: [u32; 624]) {
+        self.mt = state;
+        self.index = 0;
+    }
+
     pub fn next(self: &mut Self) -> u32 {
         let mut y: u32 = 0;
 
+        // twist every 624 values
         if self.index >= N_32 {
             if self.index > N_32 {
                 self.seed(5489);
@@ -78,9 +85,10 @@ impl Mt19937 {
         y = self.mt[self.index];
         self.index += 1;
 
+        //tempering
         y ^= y >> 11;
-        y ^= (y << 7) & 0x9d2c5680u32;
-        y ^= (y << 15) & 0xefc60000u32;
+        y ^= (y << 7) & MT19337_A_32;
+        y ^= (y << 15) & MT19337_B_32;
         y ^= y >> 18;
         y
     }

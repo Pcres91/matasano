@@ -27,12 +27,13 @@ use std::{
 };
 
 pub fn set3() {
-    // print_challenge_result(17, &challenge17);
-    // print_challenge_result(18, &challenge18);
-    // print_challenge_result(19, &challenge19);
-    // print_challenge_result(20, &challenge20);
-    // print_challenge_result(21, &challenge21);
+    print_challenge_result(17, &challenge17);
+    print_challenge_result(18, &challenge18);
+    print_challenge_result(19, &challenge19);
+    print_challenge_result(20, &challenge20);
+    print_challenge_result(21, &challenge21);
     print_challenge_result(22, &challenge22);
+    print_challenge_result(23, &challenge23);
 }
 
 /// CBC padding oracle attack best explained here https://research.nccgroup.com/2021/02/17/cryptopals-exploiting-cbc-padding-oracles/
@@ -401,7 +402,7 @@ pub fn challenge21() -> Result<()> {
     Ok(())
 }
 
-/// cracking the seed of a Mersenne Twister
+/// cracking the seed of a Unix timestamp-seeded Mersenne Twister
 pub fn challenge22() -> Result<()> {
     let s = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
     let passage_of_time = thread_rng().gen_range(40..1000);
@@ -426,6 +427,49 @@ pub fn challenge22() -> Result<()> {
         .into_inner();
 
     expect_eq(s.as_secs() as u32, found, "found the seed")?;
+
+    Ok(())
+}
+
+pub fn challenge23() -> Result<()> {
+    let mut rng = rand::thread_rng();
+    let mut mt = Mt19937::seeded(rng.gen());
+
+    fn untemper_generated_value(tempered: u32) -> u32 {
+        // revert (y >> 18) ^ y
+        let mut untempered = (tempered >> 18) ^ tempered;
+        // revert ((y << 15) & 0xefc60000u32) ^ y
+        untempered = ((untempered << 15) & MT19337_B_32) ^ untempered;
+        // revert y ^ ((y << 7) & 0x9d2c5680u32);
+        let mut tmp = (untempered << 7) & MT19337_A_32;
+        (0..4).for_each(|_| {
+            untempered ^= tmp;
+            tmp = (tmp << 7) & MT19337_A_32;
+        });
+        // revert y ^ ( y >> 11);
+        untempered ^= (untempered >> 11) ^ (untempered >> 22);
+        untempered
+    }
+
+    let found_state = (0..624)
+        .map(|_| {
+            let untempered = untemper_generated_value(mt.next());
+            untempered
+        })
+        .collect::<Vec<_>>();
+
+    let mut mt_attack = Mt19937::default();
+    mt_attack.set_internal_state(found_state.try_into().unwrap());
+
+    (0..624).for_each(|_| {
+        mt_attack.next();
+    });
+
+    expect_eq(
+        mt.next(),
+        mt_attack.next(),
+        "re-creating the internal state of MT19337 allows for us to predict the next generated value",
+    )?;
 
     Ok(())
 }
@@ -456,5 +500,9 @@ mod set3_tests {
     #[test]
     fn test_challenge22() {
         challenge22().unwrap();
+    }
+    #[test]
+    fn test_challenge23() {
+        challenge23().unwrap();
     }
 }
