@@ -21,7 +21,6 @@ pub trait Cipher {
 }
 
 pub fn generate_rnd_key() -> [u8; aes::BLOCK_SIZE] {
-    extern crate rand;
     use rand::prelude::*;
 
     let mut rng = rand::thread_rng();

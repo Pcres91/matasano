@@ -46,8 +46,8 @@ pub enum ExpectationFailure {
 pub enum AesError {
     #[error("the key for ECB 128 encryption must be aes::BLOCK_SIZE bytes in length")]
     KeyLengthError,
-    #[error("Cipher Text length must be divisible by aes::BLOCK_SIZE")]
-    CipherTextLengthError,
+    #[error("Cipher Text length must be divisible by aes::BLOCK_SIZE, got {0}")]
+    CipherTextLengthError(String),
     #[error("The data is not PKCS7-padded")]
     NotPKCS7PaddedError,
     #[error("Maximum block length for PKCS7 padding exceeded. Maximum is 0xff bytes")]

@@ -1,8 +1,10 @@
-use crate::{aes, common::bit_ops::xor_bytes};
-
 use super::{
     aes128::{encrypt_block, expand_key},
     util::{Cipher, Result},
+};
+use crate::{
+    aes,
+    common::{bit_ops::xor_bytes, expectations::expect_true, util::Wrap},
 };
 
 pub struct CtrCipher {
@@ -19,6 +21,38 @@ impl Cipher for CtrCipher {
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
         encrypt_128(ciphertext, &self.key, self.nonce)
+    }
+}
+
+impl CtrCipher {
+    /// seek to the offset in ciphertext, decrypt, and replace the plaintext there with
+    /// new_text. Returns the ciphertext
+    pub fn edit(&self, ciphertext: &[u8], offset: usize, new_text: &[u8]) -> Result<Vec<u8>> {
+        expect_true(
+            ciphertext.len() - 1 > offset,
+            &format!(
+                "offset ({offset}) is past ciphertext length ({}).",
+                ciphertext.len()
+            ),
+        )?;
+        expect_true(
+            new_text.len() + offset <= ciphertext.len(),
+            &format!(
+                "not enough space for the new text ({}), offset {offset}, total length ({})",
+                new_text.len(),
+                ciphertext.len()
+            ),
+        )?;
+
+        let mut plaintext = self.decrypt(&ciphertext)?;
+
+        println!("{}", Wrap(plaintext.clone()));
+
+        plaintext.splice(offset..offset + new_text.len(), new_text.iter().map(|c| *c));
+
+        println!("{}", Wrap(plaintext.clone()));
+
+        self.encrypt(&plaintext)
     }
 }
 

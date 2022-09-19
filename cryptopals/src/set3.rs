@@ -19,11 +19,11 @@ use crate::{
 use itertools::{FoldWhile, Itertools};
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
-use std::{convert::TryInto, slice::Iter};
-use std::{fs::File, iter::Peekable};
 use std::{
     io::{prelude::*, BufReader},
     time::SystemTime,
+    {convert::TryInto, slice::Iter},
+    {fs::File, iter::Peekable},
 };
 
 pub fn set3() {

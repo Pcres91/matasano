@@ -38,7 +38,9 @@ pub fn encrypt_128(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 
 pub fn decrypt_128(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     if ciphertext.len() % aes::BLOCK_SIZE != 0 {
-        return Err(AesError::CipherTextLengthError);
+        return Err(AesError::CipherTextLengthError(
+            ciphertext.len().to_string(),
+        ));
     }
 
     if key.len() != aes::BLOCK_SIZE {
