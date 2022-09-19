@@ -1,3 +1,6 @@
+// All credit to https://github.com/mitsuhiko/sha1-smol/blob/master/src/lib.rs
+// where this was taken from
+
 // Copyright (c) 2006-2009 Graydon Hoare
 // Copyright (c) 2009-2013 Mozilla Foundation
 

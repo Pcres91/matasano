@@ -1,3 +1,6 @@
+// All credit to https://github.com/mitsuhiko/sha1-smol/blob/master/src/lib.rs
+// where this was taken from
+
 //! A minimal implementation of SHA1 for rust.
 //!
 //! This implementation supports no_std which is the default mode.  The
