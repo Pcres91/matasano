@@ -212,15 +212,15 @@ pub fn find_key_size(
 ///
 /// Examples:
 ///
-/// ```
-/// let v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];\n
+///
+/// let v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 /// let r = get_slice(&v, 0, 2);
 /// expect_eq(vec![0, 2, 4, 6, 8, 10, 12], r, "sliced correctly").unwrap();
 /// let r = get_slice(&v, 1, 3);
 /// expect_eq(vec![1, 4, 7, 10], r, "sliced correctly").unwrap();
 /// let r = get_slice(&v, 2, 4);
 /// expect_eq(vec![2, 6, 10], r, "sliced correctly").unwrap();
-/// ```
+///
 pub fn get_slice(data: &[u8], start_idx: usize, step_by: usize) -> Vec<u8> {
     data[start_idx..]
         .par_iter()

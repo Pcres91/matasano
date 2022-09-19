@@ -1,16 +1,11 @@
-use itertools::{Itertools, FoldWhile};
-
 use crate::{
     aes::{
-        self, ctr, ecb,
+        ctr, ecb,
         util::{generate_rnd_key, Cipher},
     },
     base64,
     challenges::print_challenge_result,
-    common::{
-        errors::Result,
-        util::{until_err, Wrap}, expectations::expect_eq, bit_ops::xor_bytes,
-    },
+    common::{bit_ops::xor_bytes, errors::Result, expectations::expect_eq, util::until_err},
 };
 use std::{
     fs::File,
@@ -40,11 +35,15 @@ pub fn challenge25() -> Result<()> {
     };
 
     let ciphertext = cipher.encrypt(&plaintext)?;
-    
-    let attacking_pt = vec![1u8;ciphertext.len()];
+
+    let attacking_pt = vec![1u8; ciphertext.len()];
 
     let new_ct = cipher.edit(&ciphertext, 0, &attacking_pt)?;
-    expect_eq(ciphertext.len(), new_ct.len(), "checking edit fn works as expected")?;
+    expect_eq(
+        ciphertext.len(),
+        new_ct.len(),
+        "checking edit fn works as expected",
+    )?;
 
     let keystream = xor_bytes(&attacking_pt, &new_ct)?;
 
