@@ -1,12 +1,12 @@
 use crate::{
     aes::{
-        self, ctr, ecb,
+        ctr, ecb,
         util::{generate_rnd_key, Cipher},
     },
     base64,
     challenges::print_challenge_result,
     common::{bit_ops::xor_bytes, errors::Result, expectations::*, util::until_err},
-    sha1::{lib::*, AuthenticationResult, Messenger},
+    sha1::*,
 };
 use std::{
     fs::File,
@@ -15,7 +15,8 @@ use std::{
 
 pub fn set4() {
     // print_challenge_result(25, &challenge25);
-    print_challenge_result(26, &challenge28);
+    // print_challenge_result(26, &challenge28);
+    print_challenge_result(29, &challenge29);
 }
 
 /// Break "random access read/write" AES CTR
@@ -57,7 +58,7 @@ pub fn challenge25() -> Result<()> {
 }
 
 pub fn challenge28() -> Result<()> {
-    let secret_prefix_mac = generate_rnd_key();
+    let secret_prefix_mac = &generate_key(32);
 
     let sender = Messenger::new(secret_prefix_mac);
     let receiver = Messenger::new(secret_prefix_mac);
@@ -72,7 +73,7 @@ pub fn challenge28() -> Result<()> {
         "Typical send/receive",
     )?;
 
-    let bad_actor = Messenger::new(generate_rnd_key());
+    let bad_actor = Messenger::new(&generate_key(32));
 
     let bad_actor_message = bad_actor.send(my_message);
 
@@ -83,6 +84,47 @@ pub fn challenge28() -> Result<()> {
         receiver.authenticate_with_prefix_mac(&bad_actor_message),
         "Typical send/receive",
     )?;
+
+    Ok(())
+}
+
+pub fn challenge29() -> Result<()> {
+    let message = b"count=10&lat=37.351&user_id=1&long=-119.827&waffle=eggo";
+
+    println!("\n\nmessage len: {}", message.len());
+
+    let secret_key = generate_key(14);
+    let client = Messenger::new(&secret_key);
+    let receiver = Messenger::new(&secret_key);
+
+    let cl_message = client.send(message);
+    println!("receiver authenticating...");
+    dbg!(&cl_message.mac);
+    expect_eq(
+        AuthenticationResult::Successful,
+        receiver.authenticate_with_prefix_mac(&cl_message),
+        "original message",
+    )?;
+
+    let attacker = Messenger::new(&generate_key(14));
+
+    let mut new_message = message.to_vec();
+
+    new_message.push(0x80);
+    new_message.extend(vec![0u8; 26]);
+    new_message.extend([0x02, 0x28]);
+    new_message.extend(b"&waffle=liege");
+
+    println!("len: {}", new_message.len());
+
+    println!("attacker sending...");
+    let bad_message = attacker.send(&new_message);
+    dbg!(&bad_message.mac);
+    // expect_eq(
+    //     AuthenticationResult::Successful,
+    //     receiver.authenticate_with_prefix_mac(&bad_message),
+    //     "Attacker trying to pwn",
+    // )?;
 
     Ok(())
 }
